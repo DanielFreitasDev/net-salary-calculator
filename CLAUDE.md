@@ -11,7 +11,7 @@ Calculadora de salário líquido CLT (Brasil), 100% estática e offline. Três a
 - **Sem build e sem dependências.** Não adicione `package.json`, gerenciador de pacotes, bundler nem framework. É HTML/CSS/JavaScript puro (ES2022).
 - **Arquivo único, sem ES modules.** Não use `type="module"` nem `import`/`export` de ES: eles quebram ao abrir `index.html` via `file://` (bloqueio de CORS), e abrir por duplo clique é requisito da ferramenta. Todo o JS fica em `script.js`; todo o CSS em `style.css`.
 - **100% offline.** Nada de CDN, fontes web ou qualquer recurso externo — apenas fontes do sistema e assets inline (ex.: favicon em `data:` URI).
-- **Motor de cálculo sem DOM.** As funções puras (`computePayroll`, `computeInss`, `computeIrrf`, `computeThirteenth`, `computeVacation`, `taxFromTable`, `parseCurrency`, `parseHours`, `monthCalendar`) não podem tocar o DOM. `script.js` roda no navegador **e** no Node: o export CommonJS é guardado por `typeof module`, e o bootstrap do navegador por `typeof document`. Mantenha esses guards e o motor livre de DOM.
+- **Motor de cálculo sem DOM.** As funções puras (`computePayroll`, `computeInss`, `computeIrrf`, `computeThirteenth`, `computeVacation`, `computeSeverance`, `computeNoticeDays`, `computeUnemployment`, `taxFromTable`, `parseCurrency`, `parseHours`, `parseIsoDate`, `calendarTwelfths`, `anniversaryTwelfths`, `monthCalendar`) não podem tocar o DOM. `script.js` roda no navegador **e** no Node: o export CommonJS é guardado por `typeof module`, e o bootstrap do navegador por `typeof document`. Mantenha esses guards e o motor livre de DOM.
 
 ## Convenção de idioma
 
@@ -24,7 +24,7 @@ Identificadores e código em **inglês**; textos de interface e **comentários e
 
 ## Parâmetros oficiais
 
-As tabelas de 2026 (INSS, IRRF, redutor da Lei 15.270/2025, salário-família, FGTS) ficam no objeto `DEFAULT_PARAMS` no topo de `script.js`, espelhado no editor da aba "Tabelas e parâmetros". Para atualizar impostos, edite **apenas esse objeto**. O `localStorage` sobrescreve os padrões (chaves `net-salary-calc:params:v1`, `:form:v1`, `:theme`).
+As tabelas de 2026 (INSS, IRRF, redutor da Lei 15.270/2025, salário-família, FGTS, aviso prévio/multas da rescisão e faixas do seguro-desemprego) ficam no objeto `DEFAULT_PARAMS` no topo de `script.js`, espelhado no editor da aba "Tabelas e parâmetros". Para atualizar impostos, edite **apenas esse objeto**. O `localStorage` sobrescreve os padrões (chaves `net-salary-calc:params:v1`, `:form:v1`, `:theme`).
 
 ## Estilo
 
@@ -35,4 +35,4 @@ As tabelas de 2026 (INSS, IRRF, redutor da Lei 15.270/2025, salário-família, F
 
 - **Tema por tokens:** `:root` = claro (padrão); `@media (prefers-color-scheme: dark)` = modo Auto; `:root[data-theme="dark"|"light"]` = escolha manual, que vence a media query.
 - **Progressive enhancement:** os controles nativos (`<select>`, checkbox, number) são a fonte de estado; a camada personalizada é montada em `enhanceControls()` e sincroniza o nativo. Não quebre o fallback nativo nem a leitura em `readForm`/`readThirteenthForm`/`readVacationForm`.
-- **Abas:** cada view (`calculator-view`, `thirteenth-view`, `vacation-view`, `settings-view`, `sources-view`) é um `<main>`; a navegação alterna o atributo `hidden` a partir do `data-view` dos botões. As três primeiras têm formulário próprio persistido em `FORM_FIELDS` (mesma chave de `localStorage`).
+- **Abas:** cada view (`calculator-view`, `thirteenth-view`, `vacation-view`, `severance-view`, `settings-view`, `sources-view`) é um `<main>`; a navegação alterna o atributo `hidden` a partir do `data-view` dos botões. As quatro primeiras têm formulário próprio persistido em `FORM_FIELDS` (mesma chave de `localStorage`); a leitura fica em `readForm`/`readThirteenthForm`/`readVacationForm`/`readSeveranceForm`.

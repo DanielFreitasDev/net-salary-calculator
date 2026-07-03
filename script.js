@@ -34,7 +34,22 @@ const DEFAULT_PARAMS = {
     }
   },
   familyAllowance: { quota: 67.54, incomeLimit: 1980.38 }, // Portaria MPS/MF nº 13/2026
-  fgtsRate: 8                                              // Lei nº 8.036/1990
+  fgtsRate: 8,                                             // Lei nº 8.036/1990
+  severance: {                     // Lei nº 12.506/2011 (aviso prévio) e Lei nº 8.036/1990, art. 18 (multas)
+    noticeBaseDays: 30,
+    noticePerYearDays: 3,
+    noticeMaxDays: 90,
+    finePercent: 40,               // dispensa sem justa causa (art. 18, § 1º)
+    agreementFinePercent: 20       // acordo (CLT, art. 484-A) e culpa recíproca (art. 18, § 2º)
+  },
+  unemployment: {                  // Seguro-desemprego: tabela do MTE vigente desde 11/01/2026 (Lei nº 7.998/1990)
+    firstLimit: 2222.17,           // até aqui: salário médio × 0,8
+    firstFactor: 0.8,
+    secondLimit: 3703.99,          // até aqui: 1.777,74 + 50% do que exceder a faixa 1
+    secondBase: 1777.74,
+    secondFactor: 0.5,
+    ceiling: 2518.65               // acima: parcela fixa no teto (piso do benefício = salário mínimo)
+  }
 };
 
 const PARAMS_STORAGE_KEY = "net-salary-calc:params:v1";
@@ -129,6 +144,73 @@ function monthCalendar(year, month) { // month: 1..12
     businessDays: totalDays - sundays - holidays,
     restDays: sundays + holidays
   };
+}
+
+/* ===================== datas do contrato (rescisão) ===================== */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function parseIsoDate(text) {
+  const match = String(text || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const date = new Date(+match[1], +match[2] - 1, +match[3]);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+function addDays(date, days) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+/* Soma meses sem "estourar" o mês (31/01 + 1 mês = 28/02, não 03/03). */
+function addMonthsClamped(date, months) {
+  const target = new Date(date.getFullYear(), date.getMonth() + months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(date.getDate(), lastDay));
+  return target;
+}
+
+/* Dias corridos entre duas datas, contando as duas pontas. */
+function diffDays(from, to) {
+  return Math.round((to - from) / DAY_MS) + 1;
+}
+
+function fullYearsBetween(from, to) {
+  let years = to.getFullYear() - from.getFullYear();
+  if (addMonthsClamped(from, years * 12) > to) years--;
+  return Math.max(0, years);
+}
+
+/* Avos de 1/12 por mês civil: fração ≥ 15 dias conta como mês integral
+   (Lei nº 4.090/1962, art. 1º, § 2º — 13º; Lei nº 7.998/1990, art. 4º, § 3º). */
+function calendarTwelfths(from, to, cap) {
+  if (!from || !to || to < from) return 0;
+  const limit = cap == null ? 12 : cap;
+  let count = 0;
+  let cursor = new Date(from.getFullYear(), from.getMonth(), 1);
+  while (cursor <= to && count < limit) {
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const start = from > cursor ? from : cursor;
+    const end = to < monthEnd ? to : monthEnd;
+    if (diffDays(start, end) >= 15) count++;
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  return count;
+}
+
+/* Avos do período aquisitivo de férias: janelas mensais ancoradas no início do
+   período; fração superior a 14 dias conta (CLT, art. 146, parágrafo único). */
+function anniversaryTwelfths(from, to) {
+  if (!from || !to || to < from) return 0;
+  let count = 0;
+  for (let n = 0; n < 12; n++) {
+    const start = addMonthsClamped(from, n);
+    if (start > to) break;
+    const windowEnd = addDays(addMonthsClamped(from, n + 1), -1);
+    const end = to < windowEnd ? to : windowEnd;
+    if (diffDays(start, end) >= 15) count++;
+  }
+  return count;
 }
 
 /* ===================== motor de cálculo (funções puras) ===================== */
@@ -395,6 +477,194 @@ function computeVacation(input, params) {
   };
 }
 
+/* Regras por modalidade de rescisão (CLT, arts. 477 a 486 e 484-A; Lei nº
+   8.036/1990, arts. 18 e 20; Súmulas 14, 171 e 261 do TST):
+   - notice: quem deve o aviso ("employer", "employee", "half" na culpa
+     recíproca — sempre metade indenizada — ou "none");
+   - noticeFactor: fração do aviso indenizado paga (0,5 = metade no acordo);
+   - thirteenth/vacation: fração dos avos devida (0 = perde na justa causa;
+     0,5 = metade na culpa recíproca);
+   - fineKey: chave do percentual da multa do FGTS em params.severance;
+   - withdraw: "full" saca saldo + multa, "partial" até 80% (art. 484-A,
+     § 1º), "none" mantém o saldo na conta vinculada;
+   - unemployment: dispensa involuntária que habilita o seguro-desemprego. */
+const SEVERANCE_RULES = {
+  "no-cause":            { notice: "employer", noticeFactor: 1,   thirteenth: 1,   vacation: 1,   fineKey: "finePercent",          withdraw: "full",    unemployment: true },
+  "agreement":           { notice: "employer", noticeFactor: 0.5, thirteenth: 1,   vacation: 1,   fineKey: "agreementFinePercent", withdraw: "partial", unemployment: false },
+  "resignation":         { notice: "employee", noticeFactor: 0,   thirteenth: 1,   vacation: 1,   fineKey: null,                   withdraw: "none",    unemployment: false },
+  "with-cause":          { notice: "none",     noticeFactor: 0,   thirteenth: 0,   vacation: 0,   fineKey: null,                   withdraw: "none",    unemployment: false },
+  "indirect":            { notice: "employer", noticeFactor: 1,   thirteenth: 1,   vacation: 1,   fineKey: "finePercent",          withdraw: "full",    unemployment: true },
+  "mutual-fault":        { notice: "half",     noticeFactor: 0.5, thirteenth: 0.5, vacation: 0.5, fineKey: "agreementFinePercent", withdraw: "full",    unemployment: false },
+  "term-end":            { notice: "none",     noticeFactor: 0,   thirteenth: 1,   vacation: 1,   fineKey: null,                   withdraw: "full",    unemployment: false },
+  "term-early-employer": { notice: "none",     noticeFactor: 0,   thirteenth: 1,   vacation: 1,   fineKey: "finePercent",          withdraw: "full",    unemployment: true,  indemnity479: true },
+  "term-early-employee": { notice: "none",     noticeFactor: 0,   thirteenth: 1,   vacation: 1,   fineKey: null,                   withdraw: "none",    unemployment: false, indemnity480: true },
+  "death":               { notice: "none",     noticeFactor: 0,   thirteenth: 1,   vacation: 1,   fineKey: null,                   withdraw: "full",    unemployment: false }
+};
+
+/* Aviso prévio proporcional: 30 dias + 3 por ano completo de serviço, até 90
+   (Lei nº 12.506/2011; Nota Técnica MTE nº 184/2012). */
+function computeNoticeDays(serviceYears, params) {
+  const rule = params.severance;
+  return Math.min(rule.noticeMaxDays, rule.noticeBaseDays + rule.noticePerYearDays * Math.max(0, serviceYears));
+}
+
+/* Seguro-desemprego (estimativa): carência e nº de parcelas da Lei nº
+   7.998/1990, arts. 3º e 4º (redação da Lei nº 13.134/2015), usando o tempo do
+   próprio vínculo como meses trabalhados nos últimos 36; valor da parcela pelas
+   faixas do MTE sobre a média salarial, entre o salário mínimo e o teto, com
+   arredondamento para o inteiro imediatamente superior (art. 4º, § 4º). */
+function computeUnemployment(input, params) {
+  const table = params.unemployment;
+  const request = Math.max(1, Math.min(3, Math.round(input.requestNumber || 1)));
+  const months = Math.min(36, input.monthsWorked);
+  const minimumMonths = request === 1 ? 12 : request === 2 ? 9 : 6;
+  const meetsMinimum = months >= minimumMonths;
+  let installments = 0;
+  if (input.eligible && meetsMinimum) {
+    installments = months >= 24 ? 5 : months >= 12 ? 4 : 3;
+  }
+  const average = input.averageSalary;
+  let value;
+  if (average <= table.firstLimit) value = average * table.firstFactor;
+  else if (average <= table.secondLimit) value = table.secondBase + (average - table.firstLimit) * table.secondFactor;
+  else value = table.ceiling;
+  value = Math.ceil(Math.min(table.ceiling, Math.max(params.minimumWage, value)));
+  const installmentValue = installments > 0 ? value : 0;
+  return {
+    eligible: !!input.eligible, request, monthsCounted: months, minimumMonths, meetsMinimum,
+    installments, installmentValue, total: round2(installments * installmentValue)
+  };
+}
+
+/* Rescisão do contrato: saldo de salário, aviso prévio, 13º e férias com a
+   projeção do aviso indenizado (CLT, art. 487, § 1º; OJ 82 da SDI-1 do TST),
+   indenizações dos contratos a termo (arts. 479/480), FGTS com multa e saque
+   e estimativa do seguro-desemprego. Tributação: saldo e 13º pagam INSS e
+   IRRF (13º em separado, exclusivo na fonte); aviso indenizado (STJ, Tema
+   478; IN RFB nº 2.110/2022, art. 34; Lei nº 7.713/1988, art. 6º, V), férias
+   indenizadas + 1/3 (Lei nº 8.212/1991, art. 28, § 9º, "d"; Súmulas 125 e
+   386 do STJ) e multa do FGTS são isentos. */
+function computeSeverance(input, params) {
+  const rules = SEVERANCE_RULES[input.type] || SEVERANCE_RULES["no-cause"];
+  const admission = parseIsoDate(input.admissionDate);
+  const termination = parseIsoDate(input.terminationDate);
+  if (input.baseSalary <= 0 || !admission || !termination || termination < admission) return null;
+
+  const base = round2(input.baseSalary + (input.averages || 0));
+  const dayValue = base / 30;
+
+  // Saldo de salário: dias corridos no mês do desligamento (mês comercial de 30;
+  // desligamento no último dia do mês paga o mês cheio).
+  const monthLastDay = new Date(termination.getFullYear(), termination.getMonth() + 1, 0).getDate();
+  const balanceDays = termination.getDate() === monthLastDay ? 30 : Math.min(30, termination.getDate());
+  const salaryBalance = round2(input.baseSalary / 30 * balanceDays);
+
+  // Aviso prévio proporcional; indenizado projeta o fim do contrato.
+  const serviceYears = fullYearsBetween(admission, termination);
+  const noticeDays = computeNoticeDays(serviceYears, params);
+  let noticeStatus = "none", noticePaidDays = 0, noticeAmount = 0, noticeDeduction = 0;
+  if (rules.notice === "employer") {
+    noticeStatus = input.employerNotice === "worked" ? "worked" : "indemnified";
+  } else if (rules.notice === "half") {
+    noticeStatus = "indemnified"; // culpa recíproca: metade sempre indenizada (Súmula 14 do TST)
+  } else if (rules.notice === "employee") {
+    noticeStatus = ["worked", "waived", "deducted"].includes(input.employeeNotice) ? input.employeeNotice : "worked";
+    if (noticeStatus === "deducted") noticeDeduction = round2(input.baseSalary); // CLT, art. 487, § 2º
+  }
+  if (noticeStatus === "indemnified") {
+    noticePaidDays = noticeDays * rules.noticeFactor;
+    noticeAmount = round2(dayValue * noticePaidDays);
+  }
+  const projectedEnd = addDays(termination, Math.round(noticePaidDays));
+
+  // 13º proporcional: avos por mês civil; a projeção pode cruzar o ano.
+  const yearStart = new Date(termination.getFullYear(), 0, 1);
+  const thirteenthFrom = admission > yearStart ? admission : yearStart;
+  let thirteenthTwelfths;
+  if (projectedEnd.getFullYear() > termination.getFullYear()) {
+    thirteenthTwelfths = calendarTwelfths(thirteenthFrom, new Date(termination.getFullYear(), 11, 31))
+      + calendarTwelfths(new Date(projectedEnd.getFullYear(), 0, 1), projectedEnd);
+  } else {
+    thirteenthTwelfths = calendarTwelfths(thirteenthFrom, projectedEnd);
+  }
+  const thirteenthGross = round2(base * thirteenthTwelfths / 12 * rules.thirteenth);
+
+  // Férias proporcionais do período aquisitivo corrente, com projeção.
+  const accrualYears = fullYearsBetween(admission, projectedEnd);
+  const periodStart = addMonthsClamped(admission, accrualYears * 12);
+  const vacationTwelfths = rules.vacation > 0 ? anniversaryTwelfths(periodStart, projectedEnd) : 0;
+  const proportionalVacation = round2(base * vacationTwelfths / 12 * rules.vacation);
+  const proportionalThird = round2(proportionalVacation / 3);
+
+  // Férias vencidas: devidas em qualquer modalidade, inclusive justa causa
+  // (CLT, art. 146, caput); em dobro se vencido o período concessivo (art. 137).
+  const expiredPeriods = Math.max(0, Math.min(5, Math.round(input.expiredPeriods || 0)));
+  const expiredVacation = round2((base + base / 3) * expiredPeriods * (input.expiredDouble ? 2 : 1));
+
+  // Contrato a termo encerrado antes do prazo (CLT, arts. 479 e 480).
+  const contractEnd = parseIsoDate(input.contractEndDate);
+  let remainingDays = 0, earlyIndemnity = 0;
+  if ((rules.indemnity479 || rules.indemnity480) && contractEnd && contractEnd > termination) {
+    remainingDays = Math.round((contractEnd - termination) / DAY_MS);
+    if (rules.indemnity479) earlyIndemnity = round2(dayValue * remainingDays / 2);
+  }
+
+  // Descontos: INSS/IRRF sobre o saldo; 13º em separado (IRRF exclusivo na fonte).
+  const dependentsDeduction = (input.irDependents || 0) * params.irrf.dependentDeduction;
+  const inssSalary = computeInss(salaryBalance, params);
+  const irrfSalary = computeIrrf(salaryBalance, inssSalary.total + dependentsDeduction, params);
+  const inssThirteenth = computeInss(thirteenthGross, params);
+  const irrfThirteenth = computeIrrf(thirteenthGross, inssThirteenth.total + dependentsDeduction, params);
+
+  const totalEarnings = round2(salaryBalance + noticeAmount + thirteenthGross
+    + expiredVacation + proportionalVacation + proportionalThird + earlyIndemnity);
+  const totalDeductions = round2(inssSalary.total + irrfSalary.total
+    + inssThirteenth.total + irrfThirteenth.total + noticeDeduction);
+  const net = round2(totalEarnings - totalDeductions);
+
+  // FGTS: depósitos sobre as verbas remuneratórias da rescisão (saldo, 13º e
+  // aviso indenizado — Súmula 305 do TST); a multa incide sobre todos os
+  // depósitos do contrato, mesmo os já sacados (Lei nº 8.036/1990, art. 18).
+  const fgtsRate = params.fgtsRate / 100;
+  const monthsWorked = calendarTwelfths(admission, termination, 1200);
+  const estimatedBalance = round2(base * fgtsRate * (monthsWorked + monthsWorked / 12)); // mensalidades + 13º
+  const balanceInformed = input.fgtsBalance > 0;
+  const fgtsBalance = balanceInformed ? input.fgtsBalance : estimatedBalance;
+  const fgtsDeposits = round2((salaryBalance + thirteenthGross + noticeAmount) * fgtsRate);
+  const finePercent = rules.fineKey ? params.severance[rules.fineKey] : 0;
+  const fineBase = round2(fgtsBalance + (input.fgtsWithdrawn || 0) + fgtsDeposits);
+  const fine = round2(fineBase * finePercent / 100);
+  const accountTotal = round2(fgtsBalance + fgtsDeposits + fine);
+  const available = rules.withdraw === "full" ? accountTotal
+    : rules.withdraw === "partial" ? round2(accountTotal * 0.8) : 0; // CLT, art. 484-A, § 1º
+
+  const unemployment = computeUnemployment({
+    eligible: rules.unemployment,
+    monthsWorked,
+    requestNumber: input.unemploymentRequest,
+    averageSalary: base
+  }, params);
+
+  return {
+    type: input.type, base, balanceDays, salaryBalance,
+    serviceYears, noticeDays, noticeStatus, noticePaidDays, noticeAmount, noticeDeduction,
+    projectedEnd, projectedDays: Math.round(noticePaidDays),
+    thirteenthTwelfths, thirteenthGross, thirteenthFactor: rules.thirteenth,
+    vacationTwelfths, proportionalVacation, proportionalThird, vacationFactor: rules.vacation,
+    expiredPeriods, expiredDouble: !!input.expiredDouble, expiredVacation,
+    remainingDays, earlyIndemnity, owesEmployerIndemnity: !!rules.indemnity480 && remainingDays > 0,
+    inssSalary, irrfSalary, inssThirteenth, irrfThirteenth,
+    totalEarnings, totalDeductions, net,
+    fgts: {
+      monthsWorked, balance: fgtsBalance, estimated: !balanceInformed,
+      withdrawn: input.fgtsWithdrawn || 0, deposits: fgtsDeposits,
+      finePercent, fineBase, fine, accountTotal, available, withdraw: rules.withdraw
+    },
+    unemployment,
+    grandTotal: round2(net + available + unemployment.total)
+  };
+}
+
 /* ===================== leitura do formulário ===================== */
 function readForm() {
   return {
@@ -485,6 +755,25 @@ function readVacationForm() {
         ? (parseFloat($("#vac-alimony-value").value.replace(",", ".")) || 0)
         : parseCurrency($("#vac-alimony-value").value)
     }
+  };
+}
+
+function readSeveranceForm() {
+  return {
+    baseSalary: parseCurrency($("#sev-base-salary").value),
+    averages: parseCurrency($("#sev-averages").value),
+    admissionDate: $("#sev-admission").value,
+    terminationDate: $("#sev-termination").value,
+    type: $("#sev-type").value,
+    employerNotice: $("#sev-notice-employer").value,
+    employeeNotice: $("#sev-notice-employee").value,
+    contractEndDate: $("#sev-contract-end").value,
+    expiredPeriods: Math.max(0, parseInt($("#sev-expired-periods").value, 10) || 0),
+    expiredDouble: $("#sev-expired-double").checked,
+    fgtsBalance: parseCurrency($("#sev-fgts-balance").value),
+    fgtsWithdrawn: parseCurrency($("#sev-fgts-withdrawn").value),
+    irDependents: Math.max(0, parseInt($("#sev-dependents").value, 10) || 0),
+    unemploymentRequest: parseInt($("#sev-request").value, 10) || 1
   };
 }
 
@@ -708,6 +997,231 @@ function renderVacation() {
   $("#vac-memo").innerHTML = memo;
 }
 
+/* ===================== rescisão: renderização ===================== */
+const SEVERANCE_TYPE_SHORT = {
+  "no-cause": "sem justa causa", "agreement": "acordo (484-A)", "resignation": "pedido de demissão",
+  "with-cause": "justa causa", "indirect": "rescisão indireta", "mutual-fault": "culpa recíproca",
+  "term-end": "fim do contrato a termo", "term-early-employer": "antecipada pelo empregador",
+  "term-early-employee": "antecipada pelo empregado", "death": "falecimento"
+};
+
+/* Mostra apenas os campos que fazem sentido para a modalidade escolhida. */
+function syncSeveranceFields() {
+  const rules = SEVERANCE_RULES[$("#sev-type").value] || SEVERANCE_RULES["no-cause"];
+  $("#sev-notice-employer-field").classList.toggle("hidden", rules.notice !== "employer");
+  $("#sev-notice-employee-field").classList.toggle("hidden", rules.notice !== "employee");
+  $("#sev-contract-end-field").classList.toggle("hidden", !rules.indemnity479 && !rules.indemnity480);
+  $("#sev-request-field").classList.toggle("hidden", !rules.unemployment);
+}
+
+function formatDateBr(date) { return date ? date.toLocaleDateString("pt-BR") : ""; }
+
+function renderSeverance() {
+  syncSeveranceFields();
+  const input = readSeveranceForm();
+  $("#sev-type-echo").textContent = SEVERANCE_TYPE_SHORT[input.type] || "…";
+  const result = computeSeverance(input, activeParams);
+
+  if (!result) {
+    const admission = parseIsoDate(input.admissionDate);
+    const termination = parseIsoDate(input.terminationDate);
+    const message = admission && termination && termination < admission
+      ? "O último dia de trabalho precisa ser igual ou posterior à admissão."
+      : "Informe o salário, a data de admissão e o último dia de trabalho.";
+    $("#sev-body").innerHTML = `<tr><td colspan="4" class="empty-state">${message}</td></tr>`;
+    $("#sev-extra-body").innerHTML = `<tr><td colspan="2" class="empty-state">Aguardando os dados do contrato.</td></tr>`;
+    $("#sev-total-earnings").textContent = "…";
+    $("#sev-total-deductions").textContent = "…";
+    setNetSalary($("#sev-net"), 0);
+    ["#sev-fgts-available", "#sev-fgts-fine", "#sev-unemployment", "#sev-grand-total"]
+      .forEach(id => { $(id).textContent = "…"; });
+    $("#sev-months-echo").textContent = "…";
+    $("#sev-memo").innerHTML = "";
+    return;
+  }
+
+  const fmtDays = (days) => days.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  let rowsHtml = paycheckRowHtml(`Saldo de salário (${result.balanceDays} dias)`, `${result.balanceDays}d`, result.salaryBalance, "earning");
+  if (result.noticeAmount > 0.004) {
+    rowsHtml += paycheckRowHtml(`Aviso prévio indenizado${result.noticePaidDays !== result.noticeDays ? " (metade)" : ""}`,
+      `${fmtDays(result.noticePaidDays)}d`, result.noticeAmount, "earning");
+  }
+  if (result.thirteenthGross > 0.004) {
+    rowsHtml += paycheckRowHtml(`13º salário proporcional${result.thirteenthFactor !== 1 ? " (metade)" : ""}`,
+      `${result.thirteenthTwelfths}/12`, result.thirteenthGross, "earning");
+  }
+  if (result.expiredVacation > 0.004) {
+    rowsHtml += paycheckRowHtml(`Férias vencidas + 1/3${result.expiredDouble ? " (em dobro)" : ""}`,
+      `${result.expiredPeriods}×`, result.expiredVacation, "earning");
+  }
+  if (result.proportionalVacation > 0.004) {
+    rowsHtml += paycheckRowHtml(`Férias proporcionais${result.vacationFactor !== 1 ? " (metade)" : ""}`,
+      `${result.vacationTwelfths}/12`, result.proportionalVacation, "earning");
+    rowsHtml += paycheckRowHtml("1/3 constitucional sobre férias proporcionais", "⅓", result.proportionalThird, "earning");
+  }
+  if (result.earlyIndemnity > 0.004) {
+    rowsHtml += paycheckRowHtml("Indenização de metade do prazo restante (art. 479)",
+      `${result.remainingDays}d÷2`, result.earlyIndemnity, "earning");
+  }
+  rowsHtml += paycheckRowHtml("INSS sobre o saldo de salário",
+    formatPercent(result.salaryBalance > 0 ? result.inssSalary.total / result.salaryBalance * 100 : 0),
+    result.inssSalary.total, "deduction");
+  if (result.irrfSalary.total > 0.004) {
+    rowsHtml += paycheckRowHtml("IRRF sobre o saldo de salário",
+      formatPercent(result.irrfSalary.total / result.salaryBalance * 100), result.irrfSalary.total, "deduction");
+  }
+  if (result.inssThirteenth.total > 0.004) {
+    rowsHtml += paycheckRowHtml("INSS sobre o 13º (em separado)",
+      formatPercent(result.inssThirteenth.total / result.thirteenthGross * 100), result.inssThirteenth.total, "deduction");
+  }
+  if (result.irrfThirteenth.total > 0.004) {
+    rowsHtml += paycheckRowHtml("IRRF sobre o 13º (exclusivo na fonte)",
+      formatPercent(result.irrfThirteenth.total / result.thirteenthGross * 100), result.irrfThirteenth.total, "deduction");
+  }
+  if (result.noticeDeduction > 0.004) {
+    rowsHtml += paycheckRowHtml("Aviso prévio não cumprido (desconto)", "30d", result.noticeDeduction, "deduction");
+  }
+  $("#sev-body").innerHTML = rowsHtml;
+
+  $("#sev-total-earnings").textContent = formatNumber(result.totalEarnings);
+  $("#sev-total-deductions").textContent = formatNumber(result.totalDeductions);
+  setNetSalary($("#sev-net"), result.net);
+
+  const extraRow = (label, value, cls) =>
+    `<tr><td>${escapeHtml(label)}</td><td class="col-num ${cls || ""}">${escapeHtml(value)}</td></tr>`;
+  let extraHtml = extraRow(result.fgts.estimated
+    ? `Saldo do FGTS estimado (${result.fgts.monthsWorked} meses)` : "Saldo do FGTS informado",
+    formatCurrency(result.fgts.balance));
+  if (result.fgts.withdrawn > 0) {
+    extraHtml += extraRow("Saques anteriores (entram na base da multa)", formatCurrency(result.fgts.withdrawn));
+  }
+  extraHtml += extraRow(`Depósito sobre as verbas da rescisão (${activeParams.fgtsRate.toLocaleString("pt-BR")}%)`,
+    formatCurrency(result.fgts.deposits));
+  if (result.fgts.finePercent > 0) {
+    extraHtml += extraRow(`Multa de ${result.fgts.finePercent.toLocaleString("pt-BR")}% sobre os depósitos`,
+      formatCurrency(result.fgts.fine), "earning");
+  }
+  extraHtml += extraRow("Total na conta vinculada", formatCurrency(result.fgts.accountTotal));
+  extraHtml += result.fgts.withdraw === "none"
+    ? extraRow("Liberado para saque na rescisão", "R$ 0,00 (saldo fica na conta)")
+    : extraRow(result.fgts.withdraw === "partial" ? "Liberado para saque (80% do total)" : "Liberado para saque",
+      formatCurrency(result.fgts.available), "earning");
+  if (!result.unemployment.eligible) {
+    extraHtml += extraRow("Seguro-desemprego", "sem direito nesta modalidade");
+  } else if (!result.unemployment.meetsMinimum) {
+    extraHtml += extraRow("Seguro-desemprego",
+      `carência não atingida (${result.unemployment.monthsCounted} de ${result.unemployment.minimumMonths} meses)`);
+  } else {
+    extraHtml += extraRow(`Seguro-desemprego (${result.unemployment.installments} parcelas)`,
+      `${result.unemployment.installments} × ${formatCurrency(result.unemployment.installmentValue)} = ${formatCurrency(result.unemployment.total)}`,
+      "earning");
+  }
+  $("#sev-extra-body").innerHTML = extraHtml;
+
+  $("#sev-months-echo").textContent = `${result.fgts.monthsWorked} meses de contrato`;
+  $("#sev-fgts-available").textContent = formatCurrency(result.fgts.available);
+  $("#sev-fgts-fine").textContent = result.fgts.finePercent > 0 ? formatCurrency(result.fgts.fine) : "—";
+  $("#sev-unemployment").textContent = result.unemployment.total > 0 ? formatCurrency(result.unemployment.total) : "—";
+  $("#sev-grand-total").textContent = formatCurrency(result.grandTotal);
+
+  renderSeveranceMemo(input, result);
+}
+
+function renderSeveranceMemo(input, result) {
+  let html = `<h3>Saldo de salário</h3>
+    <p class="formula">salário ${formatNumber(input.baseSalary)} ÷ 30 × ${result.balanceDays} dias = R$ ${formatNumber(result.salaryBalance)}</p>`;
+
+  if (result.noticeStatus !== "none") {
+    html += `<h3>Aviso prévio (Lei 12.506/2011)</h3>
+      <p class="formula">30 + 3 × ${result.serviceYears} ano(s) completo(s) = ${result.noticeDays} dias (máx. 90)</p>`;
+    if (result.noticeAmount > 0) {
+      html += `<p class="formula">${result.noticePaidDays !== result.noticeDays ? `pela metade: ${result.noticeDays} ÷ 2 = ${result.noticePaidDays.toLocaleString("pt-BR")} dias → ` : ""}(salário + médias) ${formatNumber(result.base)} ÷ 30 × ${result.noticePaidDays.toLocaleString("pt-BR")} = R$ ${formatNumber(result.noticeAmount)}</p>
+        <p>Verba indenizatória: sem INSS (STJ, Tema 478; IN RFB 2.110/2022, art. 34) e sem IRRF (Lei 7.713/1988, art. 6º, V), mas com depósito de FGTS (Súmula 305 do TST). A projeção estende o contrato até <b>${formatDateBr(result.projectedEnd)}</b> para contagem de 13º e férias (CLT, art. 487, § 1º).</p>`;
+    } else if (result.noticeStatus === "worked") {
+      html += `<p>Aviso trabalhado: os dias do aviso já são pagos como salário normal até o último dia (entram no saldo acima); não há verba adicional.</p>`;
+    } else if (result.noticeStatus === "deducted") {
+      html += `<p>Pedido de demissão sem cumprir o aviso: a empresa pode descontar 30 dias de salário (CLT, art. 487, § 2º) = <b>R$ ${formatNumber(result.noticeDeduction)}</b>.</p>`;
+    } else {
+      html += `<p>Aviso dispensado pela empresa: sem desconto e sem pagamento.</p>`;
+    }
+  }
+
+  if (result.thirteenthGross > 0) {
+    html += `<h3>13º proporcional (Lei 4.090/1962)</h3>
+      <p class="formula">(salário + médias) ${formatNumber(result.base)} ÷ 12 × ${result.thirteenthTwelfths} avos${result.thirteenthFactor !== 1 ? " ÷ 2 (culpa recíproca, Súmula 14 do TST)" : ""} = R$ ${formatNumber(result.thirteenthGross)}</p>
+      <p>Fração ≥ 15 dias no mês conta como avo, incluindo a projeção do aviso indenizado.</p>`;
+    html += inssMemoHtml(result.inssThirteenth, result.thirteenthGross);
+    html += irrfMemoHtml(result.irrfThirteenth, "o 13º da rescisão (exclusivo na fonte)", "INSS + dependentes");
+  } else if (input.type === "with-cause") {
+    html += `<h3>13º e férias proporcionais</h3>
+      <p>Na justa causa o trabalhador <b>perde</b> o 13º proporcional (Lei 4.090/1962, art. 3º) e as férias proporcionais (Súmula 171 do TST); as férias vencidas continuam devidas (CLT, art. 146).</p>`;
+  }
+
+  if (result.expiredVacation > 0 || result.proportionalVacation > 0) {
+    html += `<h3>Férias na rescisão (CLT, arts. 146 e 147)</h3>`;
+    if (result.expiredVacation > 0) {
+      html += `<p class="formula">vencidas: ${result.expiredPeriods} período(s) × (${formatNumber(result.base)} + 1/3)${result.expiredDouble ? " × 2 (dobra do art. 137)" : ""} = R$ ${formatNumber(result.expiredVacation)}</p>`;
+    }
+    if (result.proportionalVacation > 0) {
+      html += `<p class="formula">proporcionais: ${formatNumber(result.base)} ÷ 12 × ${result.vacationTwelfths} avos${result.vacationFactor !== 1 ? " ÷ 2 (culpa recíproca)" : ""} = R$ ${formatNumber(result.proportionalVacation)} + 1/3 = R$ ${formatNumber(result.proportionalThird)}</p>`;
+    }
+    html += `<p>Férias pagas na rescisão (não gozadas) e o 1/3 são <b>isentas</b> de INSS (Lei 8.212/1991, art. 28, § 9º, “d”) e de IRRF (Súmulas 125 e 386 do STJ; IN RFB 1.500/2014, art. 62), sem depósito de FGTS.</p>`;
+  }
+
+  if (result.earlyIndemnity > 0) {
+    html += `<h3>Indenização do art. 479 da CLT (contrato a termo)</h3>
+      <p class="formula">${result.remainingDays} dias restantes ÷ 2 × R$ ${formatNumber(round2(result.base / 30))}/dia = R$ ${formatNumber(result.earlyIndemnity)}</p>
+      <p>Devida quando o empregador encerra o contrato por prazo determinado antes do termo, salvo cláusula assecuratória de rescisão antecipada (art. 481).</p>`;
+  }
+  if (result.owesEmployerIndemnity) {
+    html += `<h3>Rescisão antecipada pelo empregado (CLT, art. 480)</h3>
+      <p>Havendo prejuízo comprovado, o empregado pode ter de indenizar o empregador em até <b>R$ ${formatNumber(round2(result.base / 30 * result.remainingDays / 2))}</b> (metade dos ${result.remainingDays} dias restantes). Não foi descontado nesta simulação.</p>`;
+  }
+
+  if (result.salaryBalance > 0) {
+    html += inssMemoHtml(result.inssSalary, result.salaryBalance);
+    html += irrfMemoHtml(result.irrfSalary, "o saldo de salário", "INSS + dependentes");
+  }
+
+  html += `<h3>FGTS (Lei 8.036/1990)</h3>`;
+  html += result.fgts.estimated
+    ? `<p class="formula">saldo estimado: ${formatNumber(result.base)} × ${activeParams.fgtsRate.toLocaleString("pt-BR")}% × (${result.fgts.monthsWorked} meses + 13º) = R$ ${formatNumber(result.fgts.balance)}</p>
+      <p>Prefira informar o saldo real (app FGTS da CAIXA): juros, atualização monetária e variações salariais mudam o valor.</p>`
+    : `<p>Saldo informado: R$ ${formatNumber(result.fgts.balance)}.</p>`;
+  html += `<p class="formula">depósitos da rescisão: (saldo ${formatNumber(result.salaryBalance)}${result.thirteenthGross > 0 ? ` + 13º ${formatNumber(result.thirteenthGross)}` : ""}${result.noticeAmount > 0 ? ` + aviso ${formatNumber(result.noticeAmount)}` : ""}) × ${activeParams.fgtsRate.toLocaleString("pt-BR")}% = R$ ${formatNumber(result.fgts.deposits)}</p>`;
+  if (result.fgts.finePercent > 0) {
+    html += `<p class="formula">multa: ${result.fgts.finePercent.toLocaleString("pt-BR")}% × (${formatNumber(result.fgts.balance)}${result.fgts.withdrawn > 0 ? ` + sacados ${formatNumber(result.fgts.withdrawn)}` : ""} + ${formatNumber(result.fgts.deposits)}) = R$ ${formatNumber(result.fgts.fine)}</p>
+      <p>A multa (art. 18, §§ 1º e 2º) incide sobre <b>todos os depósitos do contrato</b>, inclusive os já sacados, é depositada na conta vinculada e é isenta de INSS e IRRF.</p>`;
+  }
+  const withdrawText = {
+    full: "saque integral do saldo + multa (Lei 8.036/1990, art. 20)",
+    partial: "movimentação limitada a 80% do total da conta (CLT, art. 484-A, § 1º); os 20% restantes ficam retidos para as hipóteses do art. 20",
+    none: "sem saque nesta modalidade — o saldo permanece na conta vinculada para as hipóteses do art. 20 (nova dispensa, aposentadoria, moradia etc.)"
+  };
+  html += `<p>Liberação: ${withdrawText[result.fgts.withdraw]}.</p>`;
+
+  html += `<h3>Seguro-desemprego (Lei 7.998/1990; tabela MTE desde 11/01/2026)</h3>`;
+  if (!result.unemployment.eligible) {
+    html += `<p>Sem direito nesta modalidade: o benefício exige dispensa involuntária sem justa causa (inclui rescisão indireta e a rescisão antecipada do contrato a termo pelo empregador).</p>`;
+  } else if (!result.unemployment.meetsMinimum) {
+    html += `<p>Carência não atingida: a ${result.unemployment.request}ª solicitação exige ${result.unemployment.minimumMonths} meses de trabalho; o vínculo simulado tem ${result.unemployment.monthsCounted} nos últimos 36. Vínculos anteriores podem completar a carência — confira no aplicativo da Carteira de Trabalho Digital.</p>`;
+  } else {
+    const table = activeParams.unemployment;
+    const average = result.base;
+    let bandText;
+    if (average <= table.firstLimit) bandText = `${formatNumber(average)} × ${String(table.firstFactor).replace(".", ",")}`;
+    else if (average <= table.secondLimit) bandText = `${formatNumber(table.secondBase)} + ${String(table.secondFactor).replace(".", ",")} × (${formatNumber(average)} − ${formatNumber(table.firstLimit)})`;
+    else bandText = `acima de ${formatNumber(table.secondLimit)} → teto`;
+    html += `<p class="formula">média salarial ${formatNumber(average)} → ${bandText} → parcela R$ ${formatNumber(result.unemployment.installmentValue)}</p>
+      <p>${result.unemployment.monthsCounted} meses nos últimos 36, ${result.unemployment.request}ª solicitação → <b>${result.unemployment.installments} parcelas</b> (art. 4º, § 2º). A parcela fica entre o salário mínimo e o teto e é arredondada para o inteiro superior (§ 4º). Estimativa: considera só este vínculo e usa a remuneração informada como média dos 3 últimos salários.</p>`;
+  }
+
+  html += `<h3>Prazo de pagamento</h3>
+    <p>As verbas rescisórias devem ser pagas em até <b>10 dias corridos</b> do término do contrato (CLT, art. 477, § 6º); o atraso gera multa de um salário em favor do trabalhador (§ 8º).</p>`;
+
+  $("#sev-memo").innerHTML = html;
+}
+
 /* ===================== itens dinâmicos ===================== */
 function addDynamicItem(listSelector, withFlags, saved) {
   const element = document.createElement("div");
@@ -751,7 +1265,11 @@ const FORM_FIELDS = ["base-salary", "work-schedule", "custom-schedule", "referen
   "advance-value", "advance-mode", "absence-days", "lost-rest-days",
   "th-base-salary", "th-averages", "th-months", "th-dependents", "th-alimony-value", "th-alimony-mode",
   "vac-base-salary", "vac-averages", "vac-days", "vac-sold-days", "vac-advance-13th",
-  "vac-dependents", "vac-alimony-value", "vac-alimony-mode"];
+  "vac-dependents", "vac-alimony-value", "vac-alimony-mode",
+  "sev-base-salary", "sev-averages", "sev-admission", "sev-termination", "sev-type",
+  "sev-notice-employer", "sev-notice-employee", "sev-contract-end",
+  "sev-expired-periods", "sev-expired-double", "sev-fgts-balance", "sev-fgts-withdrawn",
+  "sev-dependents", "sev-request"];
 
 function saveFormState() {
   const data = {};
@@ -795,10 +1313,17 @@ function restoreFormState() {
 }
 
 /* ===================== parâmetros: persistência e aba de edição ===================== */
+/* Migração: parâmetros salvos antes da aba Rescisão não tinham severance/unemployment. */
+function normalizeParams(params) {
+  if (!params.severance) params.severance = JSON.parse(JSON.stringify(DEFAULT_PARAMS.severance));
+  if (!params.unemployment) params.unemployment = JSON.parse(JSON.stringify(DEFAULT_PARAMS.unemployment));
+  return params;
+}
+
 function loadParams() {
   try {
     const saved = JSON.parse(localStorage.getItem(PARAMS_STORAGE_KEY) || "null");
-    if (saved && saved.inss && saved.irrf) return saved;
+    if (saved && saved.inss && saved.irrf) return normalizeParams(saved);
   } catch (_) { /* usa padrões */ }
   return JSON.parse(JSON.stringify(DEFAULT_PARAMS));
 }
@@ -845,6 +1370,18 @@ function renderSettings() {
   $("#family-quota").value = formatNumber(activeParams.familyAllowance.quota);
   $("#family-limit").value = formatNumber(activeParams.familyAllowance.incomeLimit);
   $("#fgts-rate-input").value = String(activeParams.fgtsRate).replace(".", ",");
+
+  $("#notice-base-days").value = String(activeParams.severance.noticeBaseDays);
+  $("#notice-per-year-days").value = String(activeParams.severance.noticePerYearDays);
+  $("#notice-max-days").value = String(activeParams.severance.noticeMaxDays);
+  $("#fgts-fine-percent").value = String(activeParams.severance.finePercent).replace(".", ",");
+  $("#fgts-agreement-fine-percent").value = String(activeParams.severance.agreementFinePercent).replace(".", ",");
+  $("#su-first-limit").value = formatNumber(activeParams.unemployment.firstLimit);
+  $("#su-first-factor").value = String(activeParams.unemployment.firstFactor).replace(".", ",");
+  $("#su-second-limit").value = formatNumber(activeParams.unemployment.secondLimit);
+  $("#su-second-base").value = formatNumber(activeParams.unemployment.secondBase);
+  $("#su-second-factor").value = String(activeParams.unemployment.secondFactor).replace(".", ",");
+  $("#su-ceiling").value = formatNumber(activeParams.unemployment.ceiling);
 
   const maxInss = computeInss(activeParams.inss.ceiling, activeParams).total;
   $("#inss-note").textContent =
@@ -898,7 +1435,22 @@ function readSettings() {
       quota: parseCell($("#family-quota").value),
       incomeLimit: parseCell($("#family-limit").value)
     },
-    fgtsRate: parseFloat($("#fgts-rate-input").value.replace(",", ".")) || 0
+    fgtsRate: parseFloat($("#fgts-rate-input").value.replace(",", ".")) || 0,
+    severance: {
+      noticeBaseDays: parseInt($("#notice-base-days").value, 10) || 30,
+      noticePerYearDays: parseInt($("#notice-per-year-days").value, 10) || 0,
+      noticeMaxDays: parseInt($("#notice-max-days").value, 10) || 90,
+      finePercent: parseFloat($("#fgts-fine-percent").value.replace(",", ".")) || 0,
+      agreementFinePercent: parseFloat($("#fgts-agreement-fine-percent").value.replace(",", ".")) || 0
+    },
+    unemployment: {
+      firstLimit: parseCell($("#su-first-limit").value),
+      firstFactor: parseFloat($("#su-first-factor").value.replace(",", ".")) || 0,
+      secondLimit: parseCell($("#su-second-limit").value),
+      secondBase: parseCell($("#su-second-base").value),
+      secondFactor: parseFloat($("#su-second-factor").value.replace(",", ".")) || 0,
+      ceiling: parseCell($("#su-ceiling").value)
+    }
   };
   return true;
 }
@@ -1382,6 +1934,9 @@ function initEvents() {
   const handleVacationChange = () => { saveFormState(); renderVacation(); };
   $("#vacation-form").addEventListener("input", handleVacationChange);
   $("#vacation-form").addEventListener("change", handleVacationChange);
+  const handleSeveranceChange = () => { saveFormState(); renderSeverance(); };
+  $("#severance-form").addEventListener("input", handleSeveranceChange);
+  $("#severance-form").addEventListener("change", handleSeveranceChange);
 
   $("#th-clear").addEventListener("click", () => {
     if (!confirm("Limpar os campos do 13º salário?")) return;
@@ -1401,6 +1956,22 @@ function initEvents() {
     $("#vac-advance-13th").checked = false;
     $("#vac-alimony-mode").value = "fixed";
     $("#vac-alimony-mode").dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  $("#sev-clear").addEventListener("click", () => {
+    if (!confirm("Limpar os campos da rescisão?")) return;
+    ["sev-base-salary", "sev-averages", "sev-admission", "sev-termination",
+      "sev-contract-end", "sev-fgts-balance", "sev-fgts-withdrawn"].forEach(id => { $("#" + id).value = ""; });
+    $("#sev-expired-periods").value = "0";
+    $("#sev-dependents").value = "0";
+    $("#sev-expired-double").checked = false;
+    $("#sev-type").value = "no-cause";
+    $("#sev-notice-employer").value = "indemnified";
+    $("#sev-notice-employee").value = "worked";
+    $("#sev-request").value = "1";
+    // Ressincroniza os selects personalizados; o change também salva e re-renderiza.
+    ["sev-type", "sev-notice-employer", "sev-notice-employee", "sev-request"]
+      .forEach(id => $("#" + id).dispatchEvent(new Event("change", { bubbles: true })));
   });
 
   $("#clear-form").addEventListener("click", () => {
@@ -1485,7 +2056,7 @@ function initEvents() {
     try {
       const imported = JSON.parse($("#settings-json").value);
       if (!imported.inss || !imported.irrf) throw new Error("estrutura inválida");
-      activeParams = imported;
+      activeParams = normalizeParams(imported);
       try { localStorage.setItem(PARAMS_STORAGE_KEY, JSON.stringify(activeParams)); } catch (_) { /* segue */ }
       renderSettings();
       updateBadges();
@@ -1517,6 +2088,7 @@ function init() {
   renderResult();
   renderThirteenth();
   renderVacation();
+  renderSeverance();
 }
 
 if (typeof document !== "undefined" && document.getElementById("payroll-form")) init();
@@ -1525,6 +2097,8 @@ if (typeof document !== "undefined" && document.getElementById("payroll-form")) 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     computePayroll, computeInss, computeIrrf, computeThirteenth, computeVacation,
-    taxFromTable, parseCurrency, parseHours, monthCalendar, DEFAULT_PARAMS
+    computeSeverance, computeNoticeDays, computeUnemployment,
+    taxFromTable, parseCurrency, parseHours, monthCalendar,
+    parseIsoDate, calendarTwelfths, anniversaryTwelfths, DEFAULT_PARAMS
   };
 }

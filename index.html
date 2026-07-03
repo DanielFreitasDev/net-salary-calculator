@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <meta name="description" content="Calculadora de salário líquido CLT com as tabelas oficiais de 2026: INSS, IRRF (Lei 15.270/2025), horas extras, DSR, adicionais, FGTS e simuladores de 13º salário e férias.">
+  <meta name="description" content="Calculadora de salário líquido CLT com as tabelas oficiais de 2026: INSS, IRRF (Lei 15.270/2025), horas extras, DSR, adicionais, FGTS e simuladores de 13º salário, férias e rescisão (com multa do FGTS e seguro-desemprego).">
   <meta name="theme-color" content="#0E7A56" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0C110F" media="(prefers-color-scheme: dark)">
   <title>Calculadora de Salário Líquido · CLT 2026</title>
@@ -18,7 +18,7 @@
   <header class="app-header">
     <div class="app-header-text">
       <h1>Calculadora de salário líquido</h1>
-      <p class="app-subtitle">Folha de pagamento CLT com as tabelas oficiais vigentes: INSS progressivo, IRRF com o redutor da Lei nº 15.270/2025, horas extras com DSR, adicionais, benefícios e FGTS — com simuladores de 13º salário e férias.</p>
+      <p class="app-subtitle">Folha de pagamento CLT com as tabelas oficiais vigentes: INSS progressivo, IRRF com o redutor da Lei nº 15.270/2025, horas extras com DSR, adicionais, benefícios e FGTS — com simuladores de 13º salário, férias e rescisão do contrato.</p>
     </div>
     <div class="app-header-tools">
       <div class="theme-switch" role="group" aria-label="Tema da interface">
@@ -37,6 +37,7 @@
     <button role="tab" aria-selected="true" data-view="calculator-view">Calculadora</button>
     <button role="tab" aria-selected="false" data-view="thirteenth-view">13º salário</button>
     <button role="tab" aria-selected="false" data-view="vacation-view">Férias</button>
+    <button role="tab" aria-selected="false" data-view="severance-view">Rescisão</button>
     <button role="tab" aria-selected="false" data-view="settings-view">Tabelas e parâmetros</button>
     <button role="tab" aria-selected="false" data-view="sources-view">Fontes oficiais</button>
   </nav>
@@ -527,6 +528,190 @@
     </div>
   </main>
 
+  <!-- ============================ RESCISÃO ============================ -->
+  <main id="severance-view" hidden>
+    <div class="layout">
+      <form id="severance-form" autocomplete="off">
+
+        <section class="panel">
+          <h2 class="panel-title">Contrato e modalidade</h2>
+          <div class="row">
+            <div class="field">
+              <label for="sev-base-salary">Salário base (bruto mensal)</label>
+              <div class="money-field">
+                <span class="money-affix" aria-hidden="true">R$</span>
+                <input id="sev-base-salary" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Salário base bruto mensal em reais">
+              </div>
+            </div>
+            <div class="field">
+              <label for="sev-averages">Média mensal de variáveis (opcional)</label>
+              <div class="money-field">
+                <span class="money-affix" aria-hidden="true">R$</span>
+                <input id="sev-averages" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Média mensal de horas extras, comissões e adicionais">
+              </div>
+              <small class="field-hint">integra aviso, 13º e férias (CLT, art. 487, § 3º)</small>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="sev-admission">Data de admissão</label>
+              <input id="sev-admission" type="date" class="num" aria-label="Data de admissão">
+            </div>
+            <div class="field">
+              <label for="sev-termination">Último dia de trabalho</label>
+              <input id="sev-termination" type="date" class="num" aria-label="Último dia de trabalho (data do desligamento)">
+              <small class="field-hint">com aviso trabalhado, é o último dia dele</small>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="sev-type">Tipo de rescisão</label>
+              <select id="sev-type">
+                <option value="no-cause" selected>Sem justa causa (empregador demite)</option>
+                <option value="agreement">Acordo entre as partes (art. 484-A)</option>
+                <option value="resignation">Pedido de demissão</option>
+                <option value="with-cause">Justa causa (art. 482)</option>
+                <option value="indirect">Rescisão indireta (art. 483)</option>
+                <option value="mutual-fault">Culpa recíproca (art. 484)</option>
+                <option value="term-end">Fim do contrato de experiência/termo</option>
+                <option value="term-early-employer">Antecipada pelo empregador (art. 479)</option>
+                <option value="term-early-employee">Antecipada pelo empregado (art. 480)</option>
+                <option value="death">Falecimento do empregado</option>
+              </select>
+              <small class="field-hint">contrato de experiência = prazo determinado</small>
+            </div>
+            <div class="field" id="sev-notice-employer-field">
+              <label for="sev-notice-employer">Aviso prévio</label>
+              <select id="sev-notice-employer">
+                <option value="indemnified" selected>indenizado (recebe sem trabalhar)</option>
+                <option value="worked">trabalhado (cumprido em serviço)</option>
+              </select>
+            </div>
+            <div class="field hidden" id="sev-notice-employee-field">
+              <label for="sev-notice-employee">Aviso prévio do empregado</label>
+              <select id="sev-notice-employee">
+                <option value="worked" selected>cumprido (trabalhou os 30 dias)</option>
+                <option value="waived">dispensado pela empresa</option>
+                <option value="deducted">não cumprido (desconta 30 dias)</option>
+              </select>
+            </div>
+            <div class="field hidden" id="sev-contract-end-field">
+              <label for="sev-contract-end">Fim previsto do contrato a termo</label>
+              <input id="sev-contract-end" type="date" class="num" aria-label="Data prevista para o fim do contrato por prazo determinado">
+              <small class="field-hint">para a indenização dos arts. 479/480</small>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title">Férias pendentes e FGTS</h2>
+          <div class="row">
+            <div class="field short">
+              <label for="sev-expired-periods">Férias vencidas (períodos)</label>
+              <input id="sev-expired-periods" type="number" min="0" max="3" step="1" value="0">
+              <small class="field-hint">períodos de 12 meses não gozados</small>
+            </div>
+            <div class="field">
+              <label for="sev-fgts-balance">Saldo atual do FGTS (opcional)</label>
+              <div class="money-field">
+                <span class="money-affix" aria-hidden="true">R$</span>
+                <input id="sev-fgts-balance" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Saldo atual da conta vinculada do FGTS">
+              </div>
+              <small class="field-hint">consulte no app FGTS; vazio = estimativa</small>
+            </div>
+            <div class="field">
+              <label for="sev-fgts-withdrawn">Saques anteriores no contrato (opcional)</label>
+              <div class="money-field">
+                <span class="money-affix" aria-hidden="true">R$</span>
+                <input id="sev-fgts-withdrawn" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Valores já sacados do FGTS durante este contrato">
+              </div>
+              <small class="field-hint">ex.: saque-aniversário; entram na base da multa</small>
+            </div>
+          </div>
+          <label class="check"><input type="checkbox" id="sev-expired-double"> Férias vencidas em dobro: período concessivo estourado (CLT, art. 137)</label>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title">Imposto de renda e seguro-desemprego</h2>
+          <div class="row">
+            <div class="field short">
+              <label for="sev-dependents">Dependentes (IRRF)</label>
+              <input id="sev-dependents" type="number" min="0" step="1" value="0">
+              <small class="field-hint">R$ 189,59 cada</small>
+            </div>
+            <div class="field" id="sev-request-field">
+              <label for="sev-request">Solicitação do seguro-desemprego</label>
+              <select id="sev-request">
+                <option value="1" selected>primeira vez</option>
+                <option value="2">segunda vez</option>
+                <option value="3">terceira vez ou mais</option>
+              </select>
+              <small class="field-hint">muda a carência e o nº de parcelas</small>
+            </div>
+          </div>
+          <p class="field-hint spaced">O IRRF na rescisão incide apenas sobre o <b>saldo de salário</b> e o <b>13º proporcional</b> (exclusivo na fonte). Aviso indenizado, férias + 1/3 e multa do FGTS são <b>isentos</b>.</p>
+        </section>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-danger" id="sev-clear">Limpar campos</button>
+        </div>
+      </form>
+
+      <aside class="results">
+        <div class="paycheck">
+          <div class="paycheck-header"><span>Termo de rescisão (simulação)</span><b id="sev-type-echo">…</b></div>
+          <div class="table-scroll">
+            <table class="paycheck-table">
+              <thead>
+                <tr><th>Descrição</th><th>Ref.</th><th class="col-num">Proventos</th><th class="col-num">Descontos</th></tr>
+              </thead>
+              <tbody id="sev-body">
+                <tr><td colspan="4" class="empty-state">Informe o salário, a data de admissão e o último dia de trabalho.</td></tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="2">Totais</td>
+                  <td class="col-num earning" id="sev-total-earnings">…</td>
+                  <td class="col-num deduction" id="sev-total-deductions">…</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div class="net-card">
+          <span>Líquido da rescisão</span>
+          <strong id="sev-net">R$ 0,00</strong>
+        </div>
+
+        <div class="paycheck">
+          <div class="paycheck-header"><span>FGTS e seguro-desemprego</span><b id="sev-months-echo">…</b></div>
+          <div class="table-scroll">
+            <table class="paycheck-table">
+              <tbody id="sev-extra-body">
+                <tr><td colspan="2" class="empty-state">Aguardando os dados do contrato.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="chips">
+          <div class="chip"><small>FGTS: saque liberado</small><b id="sev-fgts-available">…</b></div>
+          <div class="chip"><small>Multa do FGTS</small><b id="sev-fgts-fine">…</b></div>
+          <div class="chip"><small>Seguro-desemprego</small><b id="sev-unemployment">…</b></div>
+          <div class="chip"><small>Total geral estimado</small><b id="sev-grand-total">…</b></div>
+        </div>
+
+        <details class="memo">
+          <summary>Memória de cálculo</summary>
+          <div class="memo-body" id="sev-memo"></div>
+        </details>
+
+        <p class="note">As verbas rescisórias devem ser pagas em até <b>10 dias corridos</b> do término do contrato (CLT, art. 477, § 6º). A <b>multa do FGTS</b> é depositada na conta vinculada e sacada na CAIXA junto com o saldo liberado — <b>não sai no líquido</b> pago pela empresa. Estimativa simplificada: convenções coletivas, médias exatas, juros/atualização do FGTS e vínculos anteriores (para o seguro-desemprego) podem alterar os valores.</p>
+      </aside>
+    </div>
+  </main>
+
   <!-- ============================ PARÂMETROS ============================ -->
   <main id="settings-view" hidden>
     <div class="settings-grid">
@@ -577,6 +762,35 @@
           </tbody>
         </table>
       </section>
+
+      <section class="panel">
+        <h2 class="panel-title">Rescisão: aviso prévio e multa do FGTS</h2>
+        <table class="settings-table">
+          <tbody>
+            <tr><td>Aviso prévio: base (dias)</td><td><input id="notice-base-days" inputmode="numeric"></td></tr>
+            <tr><td>Aviso prévio: acréscimo por ano completo (dias)</td><td><input id="notice-per-year-days" inputmode="numeric"></td></tr>
+            <tr><td>Aviso prévio: máximo (dias)</td><td><input id="notice-max-days" inputmode="numeric"></td></tr>
+            <tr><td>Multa do FGTS: dispensa sem justa causa (%)</td><td><input id="fgts-fine-percent" inputmode="decimal"></td></tr>
+            <tr><td>Multa do FGTS: acordo e culpa recíproca (%)</td><td><input id="fgts-agreement-fine-percent" inputmode="decimal"></td></tr>
+          </tbody>
+        </table>
+        <p class="field-hint spaced">Aviso: Lei nº 12.506/2011 (30 + 3 por ano, máx. 90). Multas: Lei nº 8.036/1990, art. 18, §§ 1º e 2º.</p>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">Seguro-desemprego (faixas do MTE)</h2>
+        <table class="settings-table">
+          <tbody>
+            <tr><td>Faixa 1: salário médio até (R$)</td><td><input id="su-first-limit" inputmode="decimal"></td></tr>
+            <tr><td>Faixa 1: fator multiplicador</td><td><input id="su-first-factor" inputmode="decimal"></td></tr>
+            <tr><td>Faixa 2: salário médio até (R$)</td><td><input id="su-second-limit" inputmode="decimal"></td></tr>
+            <tr><td>Faixa 2: parcela fixa (R$)</td><td><input id="su-second-base" inputmode="decimal"></td></tr>
+            <tr><td>Faixa 2: fator sobre o excedente</td><td><input id="su-second-factor" inputmode="decimal"></td></tr>
+            <tr><td>Teto da parcela (R$)</td><td><input id="su-ceiling" inputmode="decimal"></td></tr>
+          </tbody>
+        </table>
+        <p class="field-hint spaced">Tabela do MTE vigente desde 11/01/2026 (Lei nº 7.998/1990). O piso da parcela é o salário mínimo informado acima; o valor final é arredondado para o inteiro superior (art. 4º, § 4º).</p>
+      </section>
     </div>
 
     <div class="settings-actions">
@@ -595,6 +809,7 @@
         <li><b>Salário mínimo</b>: decreto publicado no fim de dezembro (Planalto/DOU). Atualize o campo “Salário mínimo”. Em 2026: R$ 1.621,00 (Decreto nº 12.797/2025).</li>
         <li><b>INSS, teto e salário-família</b>: Portaria Interministerial MPS/MF publicada em janeiro (em 2026, a Portaria nº 13, de 09/01/2026). Atualize as 4 faixas do INSS e os dois campos do salário-família.</li>
         <li><b>IRRF</b>: confira a página “Tabelas” da Receita Federal. A tabela progressiva, a dedução por dependente e o desconto simplificado só mudam quando há lei ou MP nova; o redutor da Lei 15.270/2025 tem valores fixos até que a lei seja alterada.</li>
+        <li><b>Seguro-desemprego</b>: o MTE reajusta as faixas em janeiro (pelo INPC, com vigência em 11/01). Atualize os campos da seção “Seguro-desemprego” com a notícia oficial do gov.br/trabalho-e-emprego.</li>
         <li>Clique em <b>Salvar alterações</b> e gere um JSON de backup. Os links diretos estão na aba “Fontes oficiais”.</li>
       </ol>
     </section>
@@ -638,6 +853,22 @@
           <a href="https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2025/dezembro/receita-federal-atualiza-normas-relativas-ao-imposto-sobre-a-renda-das-pessoas-fisicas" target="_blank" rel="noopener">gov.br/receitafederal: notícia oficial da IN RFB 2.299/2025</a>
           <a href="https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/decreto/d9580.htm" target="_blank" rel="noopener">planalto.gov.br: RIR/2018 (art. 682, férias em separado)</a>
           <small>INSS do 13º calculado em separado da folha (art. 28, § 7º); IRRF do 13º exclusivo na fonte com o redutor de 2026 (IN 1.500/2014, arts. 13 e 65-A, § 3º); férias tributadas separadamente dos demais rendimentos do mês (RIR/2018, art. 682); abono pecuniário e respectivo terço isentos de INSS (art. 28, § 9º) e de IRRF (IN 1.500/2014, art. 62).</small></li>
+        <li><b>Rescisão do contrato: CLT, arts. 477 a 486 (prazos, justa causa, rescisão indireta, culpa recíproca, contratos a termo) e art. 484-A (acordo mútuo, Lei nº 13.467/2017)</b>
+          <a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" target="_blank" rel="noopener">planalto.gov.br: CLT</a>
+          <small>Pagamento das verbas em até 10 dias do término (art. 477, § 6º), sob multa de um salário (§ 8º). Acordo: metade do aviso indenizado, multa de 20%, saque de até 80% e sem seguro-desemprego (art. 484-A). Contratos a termo: indenização de metade dos dias restantes (art. 479) ou possível indenização ao empregador (art. 480). Culpa recíproca: metade do aviso, do 13º e das férias proporcionais (art. 484; Súmula 14 do TST). Férias na rescisão: arts. 146 e 147 e Súmulas 171 e 261 do TST.</small></li>
+        <li><b>Aviso prévio proporcional: Lei nº 12.506/2011</b>
+          <a href="https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2011/lei/l12506.htm" target="_blank" rel="noopener">planalto.gov.br: texto da lei</a>
+          <small>30 dias + 3 por ano completo de serviço, limitado a 90 (Nota Técnica MTE nº 184/2012). O aviso indenizado projeta o contrato para 13º e férias (CLT, art. 487, § 1º), recebe FGTS (Súmula 305 do TST) e não sofre INSS (STJ, Tema 478; IN RFB nº 2.110/2022, art. 34) nem IRRF (Lei nº 7.713/1988, art. 6º, V).</small></li>
+        <li><b>FGTS na rescisão — multa e saque: Lei nº 8.036/1990, arts. 18 e 20</b>
+          <a href="https://www.planalto.gov.br/ccivil_03/leis/l8036consol.htm" target="_blank" rel="noopener">planalto.gov.br: lei consolidada</a>
+          <small>Multa de 40% sobre todos os depósitos do contrato na dispensa sem justa causa (art. 18, § 1º) e de 20% na culpa recíproca e no acordo (art. 18, § 2º; CLT, art. 484-A). Saque: dispensa sem justa causa (inclusive indireta), fim do contrato a termo, culpa recíproca e falecimento (art. 20); no acordo, movimentação limitada a 80% da conta (CLT, art. 484-A, § 1º).</small></li>
+        <li><b>Seguro-desemprego: Lei nº 7.998/1990 (com a Lei nº 13.134/2015) e tabela do MTE vigente desde 11/01/2026</b>
+          <a href="https://www.planalto.gov.br/ccivil_03/leis/l7998.htm" target="_blank" rel="noopener">planalto.gov.br: Lei 7.998/1990</a>
+          <a href="https://www.gov.br/trabalho-e-emprego/pt-br/noticias-e-conteudo/2026/janeiro/mte-reajusta-valores-do-beneficio-seguro-desemprego" target="_blank" rel="noopener">gov.br/trabalho-e-emprego: valores reajustados para 2026</a>
+          <small>Carência: 12 meses nos últimos 18 (1ª solicitação), 9 nos últimos 12 (2ª) ou 6 meses (demais) — art. 3º. Parcelas: 3 a 5 conforme os meses trabalhados nos últimos 36 (art. 4º, § 2º; fração ≥ 15 dias conta, § 3º). Faixas 2026: até R$ 2.222,17 → média × 0,8; até R$ 3.703,99 → R$ 1.777,74 + 50% do excedente; acima → teto de R$ 2.518,65; piso = salário mínimo; parcela arredondada ao inteiro superior (§ 4º).</small></li>
+        <li><b>Isenções das verbas rescisórias: Lei nº 7.713/1988, art. 6º, V (aviso indenizado, indenizações, FGTS e multa) e Lei nº 8.212/1991, art. 28, § 9º (férias indenizadas)</b>
+          <a href="https://www.planalto.gov.br/ccivil_03/leis/l7713.htm" target="_blank" rel="noopener">planalto.gov.br: Lei 7.713/1988</a>
+          <small>Férias vencidas e proporcionais pagas na rescisão + 1/3 são isentas de IRRF (Súmulas 125 e 386 do STJ; IN RFB nº 1.500/2014, art. 62) e de INSS (art. 28, § 9º, “d”). Saldo de salário e 13º proporcional são tributados normalmente (13º em separado, com IRRF exclusivo na fonte).</small></li>
         <li><b>Descanso semanal remunerado (DSR): Lei nº 605/1949</b>
           <a href="https://www.planalto.gov.br/ccivil_03/leis/l0605.htm" target="_blank" rel="noopener">planalto.gov.br: texto da lei</a></li>
         <li><b>Vale-transporte (desconto de até 6%): Lei nº 7.418/1985</b>
@@ -654,6 +885,7 @@
         <li><b>Líquido</b> = proventos (incluindo salário-família) menos INSS, IRRF, pensão, benefícios descontados, faltas e demais descontos.</li>
         <li><b>13º salário</b> = (salário + médias) ÷ 12 × avos. 1ª parcela = 50%, sem descontos; INSS calculado em separado sobre o valor integral; IRRF exclusivo na fonte (deduções legais <i>ou</i> desconto simplificado, com o redutor da Lei 15.270/2025); 2ª parcela = integral menos INSS, IRRF e 1ª parcela.</li>
         <li><b>Férias</b> = (salário + médias) ÷ 30 × dias gozados, mais 1/3 constitucional — base do INSS, do IRRF (cálculo em separado, com redutor) e do FGTS. Abono pecuniário (dias vendidos + 1/3) isento. Adiantamento do 13º, quando marcado, entra sem descontos e com FGTS.</li>
+        <li><b>Rescisão</b> = saldo de salário (dias ÷ 30) + aviso prévio (30 + 3/ano, indenizado projeta 13º e férias) + 13º proporcional (avos de fração ≥ 15 dias; INSS e IRRF em separado) + férias vencidas e proporcionais + 1/3 (isentas) ± particularidades da modalidade (metades no acordo e na culpa recíproca; indenizações dos arts. 479/480; perdas na justa causa; desconto do aviso não cumprido no pedido). <b>FGTS</b>: depósitos de 8% sobre saldo, 13º e aviso indenizado; multa de 40%/20% sobre todos os depósitos do contrato; liberação conforme a modalidade (80% no acordo). <b>Seguro-desemprego</b>: carência e nº de parcelas da Lei 7.998/1990 e faixas oficiais do MTE, com piso no salário mínimo e teto.</li>
       </ol>
     </section>
   </main>

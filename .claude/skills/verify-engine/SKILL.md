@@ -1,12 +1,12 @@
 ---
 name: verify-engine
-description: Verifica o motor de cálculo puro (INSS, IRRF, redutor, DSR, salário-família, 13º salário e férias) contra os valores oficiais 2026 documentados no README. Use após alterar o motor em script.js ou os parâmetros em DEFAULT_PARAMS.
+description: Verifica o motor de cálculo puro (INSS, IRRF, redutor, DSR, salário-família, 13º salário, férias e rescisão com FGTS/seguro-desemprego) contra os valores oficiais 2026 documentados no README. Use após alterar o motor em script.js ou os parâmetros em DEFAULT_PARAMS.
 ---
 
 # Verificar o motor de cálculo
 
 Este projeto não tem test runner. O motor puro é exportado para o Node em `script.js`
-(`module.exports = { computePayroll, computeInss, computeIrrf, computeThirteenth, computeVacation, taxFromTable, parseCurrency, parseHours, monthCalendar, DEFAULT_PARAMS }`).
+(`module.exports = { computePayroll, computeInss, computeIrrf, computeThirteenth, computeVacation, computeSeverance, computeNoticeDays, computeUnemployment, taxFromTable, parseCurrency, parseHours, parseIsoDate, calendarTwelfths, anniversaryTwelfths, monthCalendar, DEFAULT_PARAMS }`).
 A fonte da verdade para os valores esperados é a tabela **"Validação e testes"** do `README.md`.
 Tolerância: **R$ 0,01** (arredondamento).
 
@@ -76,7 +76,52 @@ process.exit(ok ? 0 : 1);
 '
 ```
 
-## Passo 3 — Cenários completos da folha (via `computePayroll`)
+## Passo 3 — Rescisão (determinístico)
+
+```bash
+node -e '
+const E = require("./script.js");
+const P = E.DEFAULT_PARAMS;
+const approx = (a, b) => Math.abs(a - b) <= 0.01;
+const mk = (o) => Object.assign({ baseSalary: 3000, averages: 0, admissionDate: "2023-01-10",
+  terminationDate: "2026-06-30", type: "no-cause", employerNotice: "indemnified", employeeNotice: "worked",
+  contractEndDate: "", expiredPeriods: 0, expiredDouble: false, fgtsBalance: 0, fgtsWithdrawn: 0,
+  irDependents: 0, unemploymentRequest: 1 }, o);
+const r1 = E.computeSeverance(mk({ expiredPeriods: 1, fgtsBalance: 10000 }), P);
+const r2 = E.computeSeverance(mk({ baseSalary: 5000, admissionDate: "2024-03-01",
+  terminationDate: "2026-07-31", type: "agreement", fgtsBalance: 8000 }), P);
+const r3 = E.computeSeverance(mk({ baseSalary: 4000, admissionDate: "2025-02-01",
+  terminationDate: "2026-07-15", type: "with-cause", expiredPeriods: 1 }), P);
+const cases = [
+  ["sem justa causa: aviso 39d",   r1.noticeAmount,       3900],
+  ["sem justa causa: 13º 7/12",    r1.thirteenthGross,    1750],
+  ["sem justa causa: líquido",     r1.net,                14601.54],
+  ["sem justa causa: multa 40%",   r1.fgts.fine,          4276.80],
+  ["sem justa causa: saque",       r1.fgts.available,     14968.80],
+  ["sem justa causa: seguro 5x",   r1.unemployment.installments, 5],
+  ["sem justa causa: parcela",     r1.unemployment.installmentValue, 2167],
+  ["acordo: aviso metade",         r2.noticeAmount,       3000],
+  ["acordo: 13º 8/12",             r2.thirteenthGross,    3333.33],
+  ["acordo: líquido",              r2.net,                13876.55],
+  ["acordo: multa 20%",            r2.fgts.fine,          1781.33],
+  ["acordo: saque 80%",            r2.fgts.available,     8550.40],
+  ["acordo: sem seguro",           r2.unemployment.total, 0],
+  ["justa causa: saldo 15d",       r3.salaryBalance,      2000],
+  ["justa causa: sem 13º",         r3.thirteenthGross,    0],
+  ["justa causa: férias vencidas", r3.expiredVacation,    5333.33],
+  ["justa causa: líquido",         r3.net,                7177.64],
+  ["justa causa: sem saque",       r3.fgts.available,     0],
+];
+let ok = true;
+for (const [name, got, exp] of cases) {
+  const pass = approx(got, exp); ok = ok && pass;
+  console.log(`${pass ? "PASS " : "FALHA"} ${name}: ${got} (esperado ${exp})`);
+}
+process.exit(ok ? 0 : 1);
+'
+```
+
+## Passo 4 — Cenários completos da folha (via `computePayroll`)
 
 Verifique também os cenários da tabela do `README.md` que dependem de `computePayroll`
 (IRRF, redutor, DSR, salário-família, líquido). Como `computePayroll(input, params)` recebe
@@ -92,9 +137,10 @@ com o esperado. Valores esperados (README §Validação e testes):
 | Horas extras + DSR | salário 2.200, HE 50% `10:00`, dias úteis 25, descansos 5 | HE 50% 150,00 · DSR 30,00 |
 | Salário-família | salário 1.900, 2 filhos até 14 anos | salário-família 135,08 |
 
-## Passo 4 — Relatório
+## Passo 5 — Relatório
 
 Para cada verificação, reporte `PASS`/`FALHA`, o valor obtido e o esperado. Se tudo passar,
 confirme que o motor está alinhado às tabelas oficiais de 2026. Se algo falhar, aponte a função
 provável (`computeInss`, `computeIrrf`/`taxFromTable`, `computePayroll`, `computeThirteenth`,
-`computeVacation`) ou o parâmetro em `DEFAULT_PARAMS` responsável.
+`computeVacation`, `computeSeverance`, `computeNoticeDays`, `computeUnemployment`,
+`calendarTwelfths`/`anniversaryTwelfths`) ou o parâmetro em `DEFAULT_PARAMS` responsável.
