@@ -319,11 +319,10 @@ function computePayroll(input, params) {
         }
     }
 
-    let nightAmount = 0;
     if (input.night.hours > 0 && input.night.rate > 0) {
         // Hora noturna reduzida: 52min30s contam como 1h (fator 60/52,5).
         const effectiveHours = input.night.hours * (input.night.reduced ? 60 / 52.5 : 1);
-        nightAmount = hourlyRate * (input.night.rate / 100) * effectiveHours;
+        const nightAmount = hourlyRate * (input.night.rate / 100) * effectiveHours;
         variablePayTotal += nightAmount;
         addEarning(`Adicional noturno (${input.night.rate}%)`, formatHoursLabel(effectiveHours), nightAmount, ALL_BASES);
     }
