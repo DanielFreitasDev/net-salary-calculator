@@ -4,7 +4,7 @@ Calculadora de salário líquido CLT (Brasil) com as tabelas oficiais vigentes e
 
 ## Descrição e objetivo
 
-Aplicação web 100% estática que estima a folha de pagamento mensal de um trabalhador CLT no formato de um demonstrativo de pagamento (holerite), com memória de cálculo completa. O objetivo é chegar o mais perto possível do cálculo de uma contabilidade real, usando exclusivamente dados de fontes oficiais do governo (Receita Federal, INSS/MPS e Planalto), e permitir que o usuário mantenha as tabelas atualizadas sem tocar no código.
+Aplicação web 100% estática que estima a folha de pagamento mensal de um trabalhador CLT no formato de um demonstrativo de pagamento (holerite), com memória de cálculo completa — e inclui simuladores de **13º salário** e de **férias** no mesmo padrão, em abas próprias. O objetivo é chegar o mais perto possível do cálculo de uma contabilidade real, usando exclusivamente dados de fontes oficiais do governo (Receita Federal, INSS/MPS e Planalto), e permitir que o usuário mantenha as tabelas atualizadas sem tocar no código.
 
 ## Funcionalidades
 
@@ -18,6 +18,8 @@ Aplicação web 100% estática que estima a folha de pagamento mensal de um trab
 - **Benefícios e descontos**: vale-transporte (trava legal de 6%), coparticipação VR/VA, plano de saúde, pensão alimentícia (R$ ou %), previdência complementar, adiantamento, faltas e DSR perdido.
 - **Linhas dinâmicas** de outros proventos/descontos, com marcação individual de incidência (INSS/IRRF/FGTS).
 - **FGTS de 8%** informativo (depósito do empregador, não desconta do líquido).
+- **Simulador de 13º salário** (aba própria): 1/12 da remuneração por mês trabalhado (avos, com médias de variáveis), 1ª parcela sem descontos (até 30/11) e 2ª parcela (até 20/12) com INSS **calculado em separado** da folha (Lei 8.212/1991, art. 28, § 7º) e IRRF **exclusivo na fonte** sobre o valor integral, já com o redutor da Lei 15.270/2025 no 13º (IN RFB 1.500/2014, arts. 13 e 65-A, § 3º, com a redação da IN RFB 2.299/2025), além de dependentes e pensão.
+- **Simulador de férias** (aba própria): dias de direito conforme faltas (CLT, art. 130), venda de até 1/3 dos dias com **abono pecuniário isento** de INSS/IRRF/FGTS (CLT, art. 143; IN RFB 1.500/2014, art. 62; Lei 8.212/1991, art. 28, § 9º), terço constitucional, IRRF **calculado em separado** dos demais rendimentos do mês (RIR/2018, art. 682) com o redutor de 2026, pensão, dependentes e adiantamento opcional da 1ª parcela do 13º (Lei 4.749/1965, art. 2º, § 2º).
 - **Tabelas e parâmetros editáveis** na própria interface, com persistência em `localStorage`, restauração dos padrões 2026 e exportação/importação de JSON.
 - **Tema claro/escuro** com três estados (Claro / Auto / Escuro), respeitando `prefers-color-scheme` no modo Auto e persistindo a escolha manual.
 - **Memória de cálculo** detalhada e leiaute de impressão que imprime apenas o demonstrativo.
@@ -57,9 +59,10 @@ O JavaScript ficou em um único arquivo por decisão consciente: módulos ES nat
 1. Informe o **salário base**; o demonstrativo à direita atualiza a cada tecla.
 2. Preencha horas extras (`49:15` ou `49,25`), adicionais, dependentes, benefícios e descontos conforme o seu caso.
 3. Confira os detalhes em **Memória de cálculo** (INSS faixa a faixa, os dois métodos do IRRF, redutor, DSR e FGTS).
-4. Em **Tabelas e parâmetros**, atualize os valores quando o governo publicar novos (checklist de janeiro incluído na própria aba) e clique em **Salvar**.
-5. Em **Fontes oficiais**, acesse os links diretos de cada norma usada.
-6. Alterne o tema no seletor **Claro / Auto / Escuro** no topo.
+4. Use as abas **13º salário** e **Férias** para simular a gratificação natalina (avos, parcelas e descontos) e o recibo de férias (dias, abono, terço e adiantamento do 13º), cada uma com sua memória de cálculo.
+5. Em **Tabelas e parâmetros**, atualize os valores quando o governo publicar novos (checklist de janeiro incluído na própria aba) e clique em **Salvar**.
+6. Em **Fontes oficiais**, acesse os links diretos de cada norma usada.
+7. Alterne o tema no seletor **Claro / Auto / Escuro** no topo.
 
 ## Validação e testes
 
@@ -73,6 +76,11 @@ O JavaScript ficou em um único arquivo por decisão consciente: módulos ES nat
 | Teto do INSS | Salário `10.000,00` | INSS `988,09` · IRRF `1.569,55` · Líquido `7.442,36` |
 | Horas extras + DSR | Salário `2.200,00`, HE 50% `10:00`, dias úteis `25`, descansos `5` | Linha HE 50% `150,00` e DSR `30,00` |
 | Salário-família | Salário `1.900,00`, 2 filhos até 14 anos | Provento salário-família `135,08` |
+| 13º integral | Aba 13º: salário `3.000,00`, 12 avos | Bruto `3.000,00` · INSS `248,60` · IRRF `isento` · 1ª parcela `1.500,00` · 2ª parcela `1.251,40` · líquido `2.751,40` |
+| 13º proporcional | Aba 13º: salário `3.000,00`, 5 avos | Bruto `1.250,00` · INSS `93,75` · 2ª parcela `531,25` |
+| 13º no teto, sem redutor | Aba 13º: salário `10.000,00`, 12 avos | INSS `988,09` · IRRF `1.569,55` · líquido `7.442,36` |
+| Férias 30 dias | Aba Férias: salário `3.000,00`, 30 dias | Férias + 1/3 `4.000,00` · INSS `368,60` · IRRF `isento` · líquido `3.631,40` · FGTS `320,00` |
+| Férias com abono | Aba Férias: salário `3.000,00`, 30 dias, vende 10 | Tributável `2.666,67` · abono isento `1.333,33` · INSS `215,69` · líquido `3.784,31` |
 
 Falha = qualquer valor diferente dos acima (tolerância de R$ 0,01 por arredondamento).
 
@@ -84,7 +92,7 @@ O motor de cálculo é exportado para Node.js e pode ser exercitado sem navegado
 node -e "const E=require('./script.js'); console.log(E.computeInss(10000, E.DEFAULT_PARAMS).total) // 988.09"
 ```
 
-A suíte usada no desenvolvimento cobre 25 casos (INSS por faixa e teto, IRRF pelos dois métodos, redutor nas três zonas, DSR, periculosidade na base da HE, salário-família, deduções legais e parsers de moeda/horas).
+A suíte usada no desenvolvimento cobre 50 casos (INSS por faixa e teto, IRRF pelos dois métodos, redutor nas três zonas, DSR, periculosidade na base da HE, salário-família, deduções legais, parsers de moeda/horas, 13º por avos/parcelas/teto e férias com abono, teto e adiantamento do 13º). O motor exporta `computePayroll`, `computeInss`, `computeIrrf`, `computeThirteenth`, `computeVacation`, `taxFromTable`, `parseCurrency`, `parseHours` e `monthCalendar`.
 
 ### Edge cases relevantes
 
@@ -120,7 +128,6 @@ A suíte usada no desenvolvimento cobre 25 casos (INSS por faixa e teto, IRRF pe
 
 ## Possíveis melhorias futuras
 
-- Cálculo de 13º salário e férias (com médias de variáveis).
 - Comparativo entre dois cenários lado a lado.
 - Suporte a múltiplos perfis salvos (ex.: "meu salário" vs "proposta nova").
 - Exportação do demonstrativo em PDF com nome/mês personalizados.
@@ -129,4 +136,4 @@ A suíte usada no desenvolvimento cobre 25 casos (INSS por faixa e teto, IRRF pe
 
 ## Fontes oficiais dos dados
 
-Todas listadas com links diretos na aba **Fontes oficiais** da aplicação: Portaria Interministerial MPS/MF nº 13/2026 (INSS, teto, salário-família), Receita Federal (tabela IRRF 2026 e exemplos da Lei 15.270/2025), Lei nº 15.270/2025, Decreto nº 12.797/2025 (salário mínimo), Lei nº 8.036/1990 (FGTS), CLT arts. 59/73/192/193, Lei nº 605/1949 (DSR) e Lei nº 7.418/1985 (vale-transporte).
+Todas listadas com links diretos na aba **Fontes oficiais** da aplicação: Portaria Interministerial MPS/MF nº 13/2026 (INSS, teto, salário-família), Receita Federal (tabela IRRF 2026 e exemplos da Lei 15.270/2025), Lei nº 15.270/2025, Decreto nº 12.797/2025 (salário mínimo), Lei nº 8.036/1990 (FGTS), CLT arts. 59/73/129–145/192/193, Lei nº 605/1949 (DSR), Lei nº 7.418/1985 (vale-transporte), Lei nº 4.090/1962 e Lei nº 4.749/1965 com o Decreto nº 10.854/2021 (13º salário), Lei nº 8.212/1991 (INSS do 13º em separado e isenção do abono), IN RFB nº 1.500/2014 atualizada pela IN RFB nº 2.299/2025 (IRRF do 13º com redutor; isenções) e RIR/2018, art. 682 (férias tributadas em separado).

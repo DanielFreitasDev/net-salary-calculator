@@ -87,6 +87,11 @@ function formatHoursLabel(decimalHours) {
   return minutes ? `${hours}h${String(minutes).padStart(2, "0")}` : `${hours}h`;
 }
 
+/* Escapa conteúdo dinâmico inserido via innerHTML. */
+function escapeHtml(text) {
+  return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+}
+
 /* ===================== calendário nacional (DSR) ===================== */
 /* Algoritmo de Meeus para a Páscoa no calendário gregoriano. */
 function easterDate(year) {
@@ -323,6 +328,73 @@ function computePayroll(input, params) {
   };
 }
 
+/* 13º salário (gratificação natalina): 1/12 da remuneração (salário + médias
+   de variáveis) por mês trabalhado no ano; fração ≥ 15 dias conta como mês
+   (Lei nº 4.090/1962; Decreto nº 10.854/2021). A 1ª parcela, paga entre 1º/02
+   e 30/11, não tem descontos (Lei nº 4.749/1965). O INSS é calculado em
+   separado da folha do mês (Lei nº 8.212/1991, art. 28, § 7º) e o IRRF é
+   exclusivo na fonte sobre o valor integral, com o redutor da Lei nº
+   15.270/2025 (IN RFB nº 1.500/2014, arts. 13 e 65-A, § 3º). */
+function computeThirteenth(input, params) {
+  const months = Math.min(12, Math.max(1, Math.round(input.months || 12)));
+  const base = round2(input.baseSalary + (input.averages || 0));
+  const gross = round2(base * months / 12);
+  const firstInstallment = round2(gross / 2);
+  const inss = computeInss(gross, params);
+  const alimonyAmount = round2(input.alimony.mode === "percent"
+    ? gross * input.alimony.value / 100
+    : input.alimony.value);
+  const legalDeductions = inss.total + input.irDependents * params.irrf.dependentDeduction + alimonyAmount;
+  const irrf = computeIrrf(gross, legalDeductions, params);
+  const totalDeductions = round2(inss.total + irrf.total + alimonyAmount);
+  const net = round2(gross - totalDeductions);
+  return {
+    months, base, gross, firstInstallment,
+    secondInstallment: round2(net - firstInstallment),
+    inss, irrf, alimonyAmount, totalDeductions, net,
+    fgtsAmount: round2(gross * params.fgtsRate / 100)
+  };
+}
+
+/* Férias: remuneração dos dias gozados + terço constitucional (CF, art. 7º,
+   XVII), ambos tributáveis; INSS e IRRF calculados em separado dos demais
+   rendimentos do mês (RIR/2018, art. 682), com o redutor da Lei nº 15.270/2025.
+   O abono pecuniário — venda de até 1/3 dos dias (CLT, art. 143) — e o terço
+   sobre ele são isentos de IRRF (IN RFB nº 1.500/2014, art. 62) e não integram
+   o salário de contribuição nem a base do FGTS (Lei nº 8.212/1991, art. 28,
+   § 9º). O adiantamento da 1ª parcela do 13º nas férias (Lei nº 4.749/1965,
+   art. 2º, § 2º) é pago sem descontos, mas recebe depósito de FGTS. */
+function computeVacation(input, params) {
+  const days = Math.min(30, Math.max(1, Math.round(input.days || 30)));
+  const soldDays = Math.min(Math.floor(days / 3), Math.max(0, Math.round(input.soldDays || 0)));
+  const restDays = days - soldDays;
+  const base = round2(input.baseSalary + (input.averages || 0));
+  const dayValue = base / 30;
+  const vacationPay = round2(dayValue * restDays);
+  const vacationThird = round2(vacationPay / 3);
+  const taxableGross = round2(vacationPay + vacationThird);
+  const abonoPay = round2(dayValue * soldDays);
+  const abonoThird = round2(abonoPay / 3);
+  const thirteenthAdvance = input.advanceThirteenth ? round2(base / 2) : 0;
+  const inss = computeInss(taxableGross, params);
+  const alimonyAmount = round2(input.alimony.mode === "percent"
+    ? taxableGross * input.alimony.value / 100
+    : input.alimony.value);
+  const legalDeductions = inss.total + input.irDependents * params.irrf.dependentDeduction + alimonyAmount;
+  const irrf = computeIrrf(taxableGross, legalDeductions, params);
+  const totalEarnings = round2(taxableGross + abonoPay + abonoThird + thirteenthAdvance);
+  const totalDeductions = round2(inss.total + irrf.total + alimonyAmount);
+  const fgtsVacation = round2(taxableGross * params.fgtsRate / 100);
+  const fgtsAdvance = round2(thirteenthAdvance * params.fgtsRate / 100);
+  return {
+    days, soldDays, restDays, base,
+    vacationPay, vacationThird, taxableGross, abonoPay, abonoThird,
+    thirteenthAdvance, inss, irrf, alimonyAmount,
+    totalEarnings, totalDeductions, net: round2(totalEarnings - totalDeductions),
+    fgtsVacation, fgtsAdvance, fgtsAmount: round2(fgtsVacation + fgtsAdvance)
+  };
+}
+
 /* ===================== leitura do formulário ===================== */
 function readForm() {
   return {
@@ -384,6 +456,38 @@ function readDynamicItems(listSelector, withFlags) {
   });
 }
 
+function readThirteenthForm() {
+  return {
+    baseSalary: parseCurrency($("#th-base-salary").value),
+    averages: parseCurrency($("#th-averages").value),
+    months: parseInt($("#th-months").value, 10) || 12,
+    irDependents: Math.max(0, parseInt($("#th-dependents").value, 10) || 0),
+    alimony: {
+      mode: $("#th-alimony-mode").value,
+      value: $("#th-alimony-mode").value === "percent"
+        ? (parseFloat($("#th-alimony-value").value.replace(",", ".")) || 0)
+        : parseCurrency($("#th-alimony-value").value)
+    }
+  };
+}
+
+function readVacationForm() {
+  return {
+    baseSalary: parseCurrency($("#vac-base-salary").value),
+    averages: parseCurrency($("#vac-averages").value),
+    days: parseInt($("#vac-days").value, 10) || 30,
+    soldDays: parseInt($("#vac-sold-days").value, 10) || 0,
+    advanceThirteenth: $("#vac-advance-13th").checked,
+    irDependents: Math.max(0, parseInt($("#vac-dependents").value, 10) || 0),
+    alimony: {
+      mode: $("#vac-alimony-mode").value,
+      value: $("#vac-alimony-mode").value === "percent"
+        ? (parseFloat($("#vac-alimony-value").value.replace(",", ".")) || 0)
+        : parseCurrency($("#vac-alimony-value").value)
+    }
+  };
+}
+
 /* ===================== renderização do resultado ===================== */
 function renderResult() {
   const input = readForm();
@@ -403,7 +507,6 @@ function renderResult() {
   }
 
   const result = computePayroll(input, activeParams);
-  const escapeHtml = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
   let rowsHtml = "";
   for (const item of result.earnings) {
@@ -440,28 +543,8 @@ function renderCalcMemo(input, result) {
       <p class="formula">R$ ${formatNumber(result.variablePayTotal)} ÷ ${input.dsr.businessDays} dias úteis × ${input.dsr.restDays} descansos = R$ ${formatNumber(result.dsrAmount)}</p>`;
   }
 
-  html += `<h3>INSS sobre base de R$ ${formatNumber(result.inssBase)}${result.inss.capped ? ` (limitada ao teto de R$ ${formatNumber(result.inss.ceiling)})` : ""}</h3><table>`;
-  for (const step of result.inss.steps) {
-    html += `<tr><td>${formatNumber(step.from)} a ${formatNumber(step.to)}</td>` +
-      `<td>× ${step.rate.toLocaleString("pt-BR")}%</td><td>${formatNumber(step.amount)}</td></tr>`;
-  }
-  html += `<tr><td colspan="2"><b>Total INSS</b></td><td><b>${formatNumber(result.inss.total)}</b></td></tr></table>`;
-
-  const irrf = result.irrf;
-  const chosen = (method) => irrf.method === method ? "chosen" : "";
-  html += `<h3>IRRF sobre rendimento tributável de R$ ${formatNumber(irrf.taxableIncome)}</h3>
-    <p>Deduções legais (INSS + dependentes + pensão + PGBL) = R$ ${formatNumber(irrf.legalDeductions)} → base R$ ${formatNumber(irrf.legalBase)} → imposto <span class="${chosen("legal")}">R$ ${formatNumber(irrf.legalTax)}</span></p>
-    <p>Desconto simplificado (R$ ${formatNumber(activeParams.irrf.simplifiedDeduction)}) → base R$ ${formatNumber(irrf.simplifiedBase)} → imposto <span class="${chosen("simplified")}">R$ ${formatNumber(irrf.simplifiedTax)}</span></p>
-    <p>Método aplicado: <b>${irrf.method === "simplified" ? "desconto simplificado" : "deduções legais"}</b> (o mais vantajoso).</p>`;
-  const rule = activeParams.irrf.reduction;
-  if (irrf.taxableIncome <= rule.exemptLimit) {
-    html += `<p>Redutor (Lei 15.270/2025): rendimento até R$ ${formatNumber(rule.exemptLimit)} → <b>imposto zerado</b> (redução de R$ ${formatNumber(irrf.reduction)}).</p>`;
-  } else if (irrf.taxableIncome <= rule.upperLimit) {
-    html += `<p>Redutor (Lei 15.270/2025):</p><p class="formula">${formatNumber(rule.constant)} - (${String(rule.coefficient).replace(".", ",")} × ${formatNumber(irrf.taxableIncome)}) = R$ ${formatNumber(rule.constant - rule.coefficient * irrf.taxableIncome)} → redução aplicada R$ ${formatNumber(irrf.reduction)}</p>`;
-  } else {
-    html += `<p>Redutor (Lei 15.270/2025): rendimento acima de R$ ${formatNumber(rule.upperLimit)} → sem redução.</p>`;
-  }
-  html += `<p><b>IRRF final: R$ ${formatNumber(irrf.total)}</b></p>`;
+  html += inssMemoHtml(result.inss, result.inssBase);
+  html += irrfMemoHtml(result.irrf, "rendimento tributável", "INSS + dependentes + pensão + PGBL");
 
   if (input.familyChildren > 0) {
     html += `<h3>Salário-família</h3><p>${result.familyEligible
@@ -473,6 +556,156 @@ function renderCalcMemo(input, result) {
     <p class="formula">R$ ${formatNumber(result.fgtsBase)} × ${activeParams.fgtsRate.toLocaleString("pt-BR")}% = R$ ${formatNumber(result.fgtsAmount)}</p>`;
 
   $("#calc-memo").innerHTML = html;
+}
+
+/* ===================== blocos comuns da memória de cálculo ===================== */
+function inssMemoHtml(inss, base) {
+  let html = `<h3>INSS sobre base de R$ ${formatNumber(base)}${inss.capped ? ` (limitada ao teto de R$ ${formatNumber(inss.ceiling)})` : ""}</h3><table>`;
+  for (const step of inss.steps) {
+    html += `<tr><td>${formatNumber(step.from)} a ${formatNumber(step.to)}</td>` +
+      `<td>× ${step.rate.toLocaleString("pt-BR")}%</td><td>${formatNumber(step.amount)}</td></tr>`;
+  }
+  return html + `<tr><td colspan="2"><b>Total INSS</b></td><td><b>${formatNumber(inss.total)}</b></td></tr></table>`;
+}
+
+function irrfMemoHtml(irrf, incomeLabel, deductionsLabel) {
+  const chosen = (method) => irrf.method === method ? "chosen" : "";
+  let html = `<h3>IRRF sobre ${incomeLabel} de R$ ${formatNumber(irrf.taxableIncome)}</h3>
+    <p>Deduções legais (${deductionsLabel}) = R$ ${formatNumber(irrf.legalDeductions)} → base R$ ${formatNumber(irrf.legalBase)} → imposto <span class="${chosen("legal")}">R$ ${formatNumber(irrf.legalTax)}</span></p>
+    <p>Desconto simplificado (R$ ${formatNumber(activeParams.irrf.simplifiedDeduction)}) → base R$ ${formatNumber(irrf.simplifiedBase)} → imposto <span class="${chosen("simplified")}">R$ ${formatNumber(irrf.simplifiedTax)}</span></p>
+    <p>Método aplicado: <b>${irrf.method === "simplified" ? "desconto simplificado" : "deduções legais"}</b> (o mais vantajoso).</p>`;
+  const rule = activeParams.irrf.reduction;
+  if (irrf.taxableIncome <= rule.exemptLimit) {
+    html += `<p>Redutor (Lei 15.270/2025): rendimento até R$ ${formatNumber(rule.exemptLimit)} → <b>imposto zerado</b> (redução de R$ ${formatNumber(irrf.reduction)}).</p>`;
+  } else if (irrf.taxableIncome <= rule.upperLimit) {
+    html += `<p>Redutor (Lei 15.270/2025):</p><p class="formula">${formatNumber(rule.constant)} - (${String(rule.coefficient).replace(".", ",")} × ${formatNumber(irrf.taxableIncome)}) = R$ ${formatNumber(rule.constant - rule.coefficient * irrf.taxableIncome)} → redução aplicada R$ ${formatNumber(irrf.reduction)}</p>`;
+  } else {
+    html += `<p>Redutor (Lei 15.270/2025): rendimento acima de R$ ${formatNumber(rule.upperLimit)} → sem redução.</p>`;
+  }
+  return html + `<p><b>IRRF final: R$ ${formatNumber(irrf.total)}</b></p>`;
+}
+
+/* Linhas do demonstrativo no mesmo padrão visual do holerite mensal. */
+function paycheckRowHtml(label, ref, amount, kind) {
+  const value = `<td class="col-num ${kind}">${formatNumber(amount)}</td>`;
+  return `<tr><td>${escapeHtml(label)}</td><td class="col-ref">${escapeHtml(ref)}</td>` +
+    (kind === "earning" ? value + `<td class="col-num"></td>` : `<td class="col-num"></td>` + value) + `</tr>`;
+}
+
+/* ===================== 13º salário: renderização ===================== */
+function renderThirteenth() {
+  const input = readThirteenthForm();
+  if (input.baseSalary <= 0) {
+    $("#th-body").innerHTML =
+      `<tr><td colspan="4" class="empty-state">Informe o salário base para simular o 13º.</td></tr>`;
+    $("#th-months-echo").textContent = "…";
+    $("#th-total-earnings").textContent = "…";
+    $("#th-total-deductions").textContent = "…";
+    setNetSalary($("#th-net"), 0);
+    ["#th-first", "#th-second", "#th-deductions", "#th-fgts"].forEach(id => { $(id).textContent = "…"; });
+    $("#th-memo").innerHTML = "";
+    return;
+  }
+
+  const result = computeThirteenth(input, activeParams);
+  let rowsHtml = paycheckRowHtml("13º salário integral", `${result.months}/12`, result.gross, "earning");
+  rowsHtml += paycheckRowHtml("INSS sobre o 13º",
+    formatPercent(result.gross > 0 ? result.inss.total / result.gross * 100 : 0), result.inss.total, "deduction");
+  rowsHtml += paycheckRowHtml("IRRF sobre o 13º (exclusivo na fonte)",
+    result.irrf.total > 0 ? formatPercent(result.irrf.total / result.gross * 100) : "isento", result.irrf.total, "deduction");
+  if (result.alimonyAmount > 0.004) {
+    rowsHtml += paycheckRowHtml("Pensão alimentícia sobre o 13º",
+      input.alimony.mode === "percent" ? formatPercent(input.alimony.value) : "", result.alimonyAmount, "deduction");
+  }
+  $("#th-body").innerHTML = rowsHtml;
+
+  $("#th-months-echo").textContent = `${result.months}/12 avos`;
+  $("#th-total-earnings").textContent = formatNumber(result.gross);
+  $("#th-total-deductions").textContent = formatNumber(result.totalDeductions);
+  setNetSalary($("#th-net"), result.net);
+  $("#th-first").textContent = formatCurrency(result.firstInstallment);
+  $("#th-second").textContent = formatCurrency(result.secondInstallment);
+  $("#th-deductions").textContent = formatCurrency(result.totalDeductions);
+  $("#th-fgts").textContent = formatCurrency(result.fgtsAmount);
+
+  let memo = `<h3>Valor integral (Lei 4.090/1962)</h3>
+    <p class="formula">(salário ${formatNumber(input.baseSalary)}${input.averages > 0 ? ` + médias ${formatNumber(input.averages)}` : ""}) ÷ 12 × ${result.months} avos = R$ ${formatNumber(result.gross)}</p>`;
+  memo += inssMemoHtml(result.inss, result.gross);
+  memo += `<p>Cálculo em separado da folha do mês (Lei 8.212/1991, art. 28, § 7º), retido na 2ª parcela.</p>`;
+  memo += irrfMemoHtml(result.irrf, "o 13º integral", "INSS + dependentes + pensão");
+  memo += `<h3>Parcelas (Lei 4.749/1965)</h3>
+    <p class="formula">1ª parcela (até 30/11, sem descontos) = ${formatNumber(result.gross)} ÷ 2 = R$ ${formatNumber(result.firstInstallment)}</p>
+    <p class="formula">2ª parcela (até 20/12) = ${formatNumber(result.gross)} − INSS ${formatNumber(result.inss.total)} − IRRF ${formatNumber(result.irrf.total)}${result.alimonyAmount > 0 ? ` − pensão ${formatNumber(result.alimonyAmount)}` : ""} − 1ª parcela = R$ ${formatNumber(result.secondInstallment)}</p>`;
+  memo += `<h3>FGTS (depósito do empregador)</h3>
+    <p class="formula">R$ ${formatNumber(result.gross)} × ${activeParams.fgtsRate.toLocaleString("pt-BR")}% = R$ ${formatNumber(result.fgtsAmount)}</p>`;
+  $("#th-memo").innerHTML = memo;
+}
+
+/* ===================== férias: renderização ===================== */
+function renderVacation() {
+  const input = readVacationForm();
+  if (input.baseSalary <= 0) {
+    $("#vac-body").innerHTML =
+      `<tr><td colspan="4" class="empty-state">Informe o salário base para simular as férias.</td></tr>`;
+    $("#vac-days-echo").textContent = "…";
+    $("#vac-total-earnings").textContent = "…";
+    $("#vac-total-deductions").textContent = "…";
+    setNetSalary($("#vac-net"), 0);
+    ["#vac-taxable", "#vac-abono", "#vac-deductions", "#vac-fgts"].forEach(id => { $(id).textContent = "…"; });
+    $("#vac-memo").innerHTML = "";
+    return;
+  }
+
+  const result = computeVacation(input, activeParams);
+  let rowsHtml = paycheckRowHtml(`Férias (${result.restDays} dias)`, `${result.restDays}d`, result.vacationPay, "earning");
+  rowsHtml += paycheckRowHtml("1/3 constitucional sobre férias", "⅓", result.vacationThird, "earning");
+  if (result.soldDays > 0) {
+    rowsHtml += paycheckRowHtml(`Abono pecuniário (${result.soldDays} dias vendidos)`, `${result.soldDays}d`, result.abonoPay, "earning");
+    rowsHtml += paycheckRowHtml("1/3 sobre o abono pecuniário", "⅓", result.abonoThird, "earning");
+  }
+  if (result.thirteenthAdvance > 0) {
+    rowsHtml += paycheckRowHtml("Adiantamento da 1ª parcela do 13º", "50%", result.thirteenthAdvance, "earning");
+  }
+  rowsHtml += paycheckRowHtml("INSS sobre férias + 1/3",
+    formatPercent(result.taxableGross > 0 ? result.inss.total / result.taxableGross * 100 : 0), result.inss.total, "deduction");
+  rowsHtml += paycheckRowHtml("IRRF sobre férias + 1/3",
+    result.irrf.total > 0 ? formatPercent(result.irrf.total / result.taxableGross * 100) : "isento", result.irrf.total, "deduction");
+  if (result.alimonyAmount > 0.004) {
+    rowsHtml += paycheckRowHtml("Pensão alimentícia sobre férias",
+      input.alimony.mode === "percent" ? formatPercent(input.alimony.value) : "", result.alimonyAmount, "deduction");
+  }
+  $("#vac-body").innerHTML = rowsHtml;
+
+  $("#vac-days-echo").textContent = `${result.restDays}d gozados${result.soldDays > 0 ? ` + ${result.soldDays}d vendidos` : ""}`;
+  $("#vac-total-earnings").textContent = formatNumber(result.totalEarnings);
+  $("#vac-total-deductions").textContent = formatNumber(result.totalDeductions);
+  setNetSalary($("#vac-net"), result.net);
+  $("#vac-taxable").textContent = formatCurrency(result.taxableGross);
+  $("#vac-abono").textContent = formatCurrency(round2(result.abonoPay + result.abonoThird));
+  $("#vac-deductions").textContent = formatCurrency(result.totalDeductions);
+  $("#vac-fgts").textContent = formatCurrency(result.fgtsAmount);
+
+  let memo = `<h3>Remuneração das férias</h3>
+    <p class="formula">(salário ${formatNumber(input.baseSalary)}${input.averages > 0 ? ` + médias ${formatNumber(input.averages)}` : ""}) ÷ 30 × ${result.restDays} dias = R$ ${formatNumber(result.vacationPay)} + 1/3 de R$ ${formatNumber(result.vacationThird)} = R$ ${formatNumber(result.taxableGross)}</p>`;
+  if (result.soldDays > 0) {
+    memo += `<h3>Abono pecuniário (CLT, art. 143)</h3>
+      <p class="formula">${result.soldDays} dias × R$ ${formatNumber(result.base / 30)}/dia = R$ ${formatNumber(result.abonoPay)} + 1/3 de R$ ${formatNumber(result.abonoThird)}</p>
+      <p>Verba isenta: não entra na base do INSS (Lei 8.212/1991, art. 28, § 9º), do IRRF (IN RFB 1.500/2014, art. 62) nem do FGTS.</p>`;
+  }
+  memo += inssMemoHtml(result.inss, result.taxableGross);
+  memo += irrfMemoHtml(result.irrf, "férias + 1/3", "INSS + dependentes + pensão");
+  memo += `<p>Férias são tributadas em separado dos demais rendimentos do mês (RIR/2018, art. 682).</p>`;
+  if (result.thirteenthAdvance > 0) {
+    memo += `<h3>Adiantamento do 13º (Lei 4.749/1965, art. 2º, § 2º)</h3>
+      <p class="formula">50% de R$ ${formatNumber(result.base)} = R$ ${formatNumber(result.thirteenthAdvance)}</p>
+      <p>Pago sem descontos; INSS e IRRF do 13º são retidos na 2ª parcela, em dezembro.</p>`;
+  }
+  memo += `<h3>FGTS (depósito do empregador)</h3>
+    <p class="formula">R$ ${formatNumber(result.taxableGross)} × ${activeParams.fgtsRate.toLocaleString("pt-BR")}% = R$ ${formatNumber(result.fgtsVacation)}</p>`;
+  if (result.fgtsAdvance > 0) {
+    memo += `<p class="formula">+ adiantamento do 13º: R$ ${formatNumber(result.thirteenthAdvance)} × ${activeParams.fgtsRate.toLocaleString("pt-BR")}% = R$ ${formatNumber(result.fgtsAdvance)}</p>`;
+  }
+  $("#vac-memo").innerHTML = memo;
 }
 
 /* ===================== itens dinâmicos ===================== */
@@ -515,7 +748,10 @@ const FORM_FIELDS = ["base-salary", "work-schedule", "custom-schedule", "referen
   "night-hours", "night-rate", "night-reduced", "hazard-pay", "unhealthy-level", "unhealthy-base",
   "ir-dependents", "family-children", "alimony-value", "alimony-mode", "private-pension",
   "transport-enabled", "transport-cost", "meal-discount", "health-plan",
-  "advance-value", "advance-mode", "absence-days", "lost-rest-days"];
+  "advance-value", "advance-mode", "absence-days", "lost-rest-days",
+  "th-base-salary", "th-averages", "th-months", "th-dependents", "th-alimony-value", "th-alimony-mode",
+  "vac-base-salary", "vac-averages", "vac-days", "vac-sold-days", "vac-advance-13th",
+  "vac-dependents", "vac-alimony-value", "vac-alimony-mode"];
 
 function saveFormState() {
   const data = {};
@@ -1093,12 +1329,13 @@ function setNetSalary(element, value) {
   element._raf = requestAnimationFrame(tick);
 }
 
-/* Aplica todos os componentes personalizados ao formulário. */
+/* Aplica todos os componentes personalizados aos formulários (calculadora
+   mensal, 13º salário e férias). */
 function enhanceControls() {
-  $$("#payroll-form select").forEach(enhanceSelect);
-  $$("#payroll-form input[type='month']").forEach(enhanceMonthPicker);
-  $$("#payroll-form .money-input").forEach(enhanceMoneyField);
-  $$("#payroll-form input[type='number']").forEach(enhanceStepper);
+  $$("form select").forEach(enhanceSelect);
+  $$("form input[type='month']").forEach(enhanceMonthPicker);
+  $$("form .money-input").forEach(enhanceMoneyField);
+  $$("form input[type='number']").forEach(enhanceStepper);
 }
 
 /* ===================== eventos e inicialização ===================== */
@@ -1138,9 +1375,36 @@ function initEvents() {
   $("#add-earning").addEventListener("click", () => addDynamicItem("#earnings-list", true));
   $("#add-deduction").addEventListener("click", () => addDynamicItem("#deductions-list", false));
 
+  // Abas 13º salário e férias: mesma mecânica da calculadora mensal.
+  const handleThirteenthChange = () => { saveFormState(); renderThirteenth(); };
+  $("#thirteenth-form").addEventListener("input", handleThirteenthChange);
+  $("#thirteenth-form").addEventListener("change", handleThirteenthChange);
+  const handleVacationChange = () => { saveFormState(); renderVacation(); };
+  $("#vacation-form").addEventListener("input", handleVacationChange);
+  $("#vacation-form").addEventListener("change", handleVacationChange);
+
+  $("#th-clear").addEventListener("click", () => {
+    if (!confirm("Limpar os campos do 13º salário?")) return;
+    ["th-base-salary", "th-averages", "th-alimony-value"].forEach(id => { $("#" + id).value = ""; });
+    $("#th-months").value = "12";
+    $("#th-dependents").value = "0";
+    $("#th-alimony-mode").value = "fixed";
+    $("#th-alimony-mode").dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  $("#vac-clear").addEventListener("click", () => {
+    if (!confirm("Limpar os campos de férias?")) return;
+    ["vac-base-salary", "vac-averages", "vac-alimony-value"].forEach(id => { $("#" + id).value = ""; });
+    $("#vac-days").value = "30";
+    $("#vac-sold-days").value = "0";
+    $("#vac-dependents").value = "0";
+    $("#vac-advance-13th").checked = false;
+    $("#vac-alimony-mode").value = "fixed";
+    $("#vac-alimony-mode").dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
   $("#clear-form").addEventListener("click", () => {
     if (!confirm("Limpar todos os campos preenchidos?")) return;
-    try { localStorage.removeItem(FORM_STORAGE_KEY); } catch (_) { /* segue */ }
     // Limpa todos os inputs de texto/número, inclusive os sem type explícito
     // (moeda e horas): a checagem por .type resolve o default "text".
     $$("#payroll-form input").forEach(element => {
@@ -1162,15 +1426,17 @@ function initEvents() {
     $$(".hours-echo").forEach(element => { element.textContent = ""; });
     dsrManuallyEdited = false;
     autofillDsr();
+    saveFormState();   // preserva o que foi digitado nas abas 13º e férias
     renderResult();
   });
 
-  // Navegação por abas.
+  // Navegação por abas (as views vêm dos data-view dos botões).
+  const viewIds = $$(".tabs button").map(button => button.dataset.view);
   $$(".tabs button").forEach(button => button.addEventListener("click", () => {
     $$(".tabs button").forEach(other => other.setAttribute("aria-selected", other === button ? "true" : "false"));
-    ["calculator-view", "settings-view", "sources-view"].forEach(id => {
-      $("#" + id).hidden = id !== button.dataset.view;
-    });
+    viewIds.forEach(id => { $("#" + id).hidden = id !== button.dataset.view; });
+    // A barra fixa do líquido (mobile) pertence só à calculadora mensal.
+    $(".net-bar").classList.toggle("hidden", button.dataset.view !== "calculator-view");
   }));
 
   // Aba de parâmetros.
@@ -1249,6 +1515,8 @@ function init() {
   renderSettings();
   updateBadges();
   renderResult();
+  renderThirteenth();
+  renderVacation();
 }
 
 if (typeof document !== "undefined" && document.getElementById("payroll-form")) init();
@@ -1256,7 +1524,7 @@ if (typeof document !== "undefined" && document.getElementById("payroll-form")) 
 /* Exporta o motor puro para testes em Node (não afeta o navegador). */
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    computePayroll, computeInss, computeIrrf, taxFromTable,
-    parseCurrency, parseHours, monthCalendar, DEFAULT_PARAMS
+    computePayroll, computeInss, computeIrrf, computeThirteenth, computeVacation,
+    taxFromTable, parseCurrency, parseHours, monthCalendar, DEFAULT_PARAMS
   };
 }

@@ -748,8 +748,8 @@ input[type="checkbox"]:focus-visible{ outline:none; box-shadow:var(--ring); }
    ===================================================================== */
 @media print{
   body::before{ display:none; }
-  .tabs, #payroll-form, .app-footer, .net-bar, .settings-actions,
-  .theme-switch, .form-actions{ display:none !important; }
+  .tabs, #payroll-form, #thirteenth-form, #vacation-form, .app-footer, .net-bar,
+  .settings-actions, .theme-switch, .form-actions{ display:none !important; }
   .layout{ grid-template-columns:1fr; }
   .results{ position:static; }
   .panel,.paycheck,.chip,.memo,.net-card{ box-shadow:none; }

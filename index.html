@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <meta name="description" content="Calculadora de salário líquido CLT com as tabelas oficiais de 2026: INSS, IRRF (Lei 15.270/2025), horas extras, DSR, adicionais e FGTS.">
+  <meta name="description" content="Calculadora de salário líquido CLT com as tabelas oficiais de 2026: INSS, IRRF (Lei 15.270/2025), horas extras, DSR, adicionais, FGTS e simuladores de 13º salário e férias.">
   <meta name="theme-color" content="#0E7A56" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0C110F" media="(prefers-color-scheme: dark)">
   <title>Calculadora de Salário Líquido · CLT 2026</title>
@@ -18,7 +18,7 @@
   <header class="app-header">
     <div class="app-header-text">
       <h1>Calculadora de salário líquido</h1>
-      <p class="app-subtitle">Folha de pagamento CLT com as tabelas oficiais vigentes: INSS progressivo, IRRF com o redutor da Lei nº 15.270/2025, horas extras com DSR, adicionais, benefícios e FGTS.</p>
+      <p class="app-subtitle">Folha de pagamento CLT com as tabelas oficiais vigentes: INSS progressivo, IRRF com o redutor da Lei nº 15.270/2025, horas extras com DSR, adicionais, benefícios e FGTS — com simuladores de 13º salário e férias.</p>
     </div>
     <div class="app-header-tools">
       <div class="theme-switch" role="group" aria-label="Tema da interface">
@@ -35,6 +35,8 @@
 
   <nav class="tabs" role="tablist" aria-label="Seções da calculadora">
     <button role="tab" aria-selected="true" data-view="calculator-view">Calculadora</button>
+    <button role="tab" aria-selected="false" data-view="thirteenth-view">13º salário</button>
+    <button role="tab" aria-selected="false" data-view="vacation-view">Férias</button>
     <button role="tab" aria-selected="false" data-view="settings-view">Tabelas e parâmetros</button>
     <button role="tab" aria-selected="false" data-view="sources-view">Fontes oficiais</button>
   </nav>
@@ -305,6 +307,226 @@
     </div>
   </main>
 
+  <!-- ============================ 13º SALÁRIO ============================ -->
+  <main id="thirteenth-view" hidden>
+    <div class="layout">
+      <form id="thirteenth-form" autocomplete="off">
+
+        <section class="panel">
+          <h2 class="panel-title">Remuneração e avos</h2>
+          <div class="row">
+            <div class="field">
+              <label for="th-base-salary">Salário base (bruto mensal)</label>
+              <div class="money-field">
+                <span class="money-affix" aria-hidden="true">R$</span>
+                <input id="th-base-salary" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Salário base bruto mensal em reais">
+              </div>
+            </div>
+            <div class="field">
+              <label for="th-averages">Média mensal de variáveis (opcional)</label>
+              <div class="money-field">
+                <span class="money-affix" aria-hidden="true">R$</span>
+                <input id="th-averages" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Média mensal de horas extras, comissões e adicionais">
+              </div>
+              <small class="field-hint">horas extras e comissões habituais integram o 13º</small>
+            </div>
+            <div class="field short">
+              <label for="th-months">Meses trabalhados (avos)</label>
+              <input id="th-months" type="number" min="1" max="12" step="1" value="12">
+              <small class="field-hint">fração ≥ 15 dias conta como mês</small>
+            </div>
+          </div>
+          <p class="field-hint spaced">O 13º equivale a <b>1/12 da remuneração por mês trabalhado</b> no ano (Lei nº 4.090/1962). Quem trabalhou o ano inteiro usa <b>12 avos</b>; admitido em julho, por exemplo, usa 6.</p>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title">Imposto de renda: dependentes e pensão</h2>
+          <div class="row">
+            <div class="field short">
+              <label for="th-dependents">Dependentes (IRRF)</label>
+              <input id="th-dependents" type="number" min="0" step="1" value="0">
+              <small class="field-hint">R$ 189,59 cada</small>
+            </div>
+            <div class="field">
+              <label for="th-alimony-value">Pensão alimentícia sobre o 13º (judicial)</label>
+              <div class="money-field" data-mode-select="th-alimony-mode">
+                <span class="money-affix" aria-hidden="true">R$</span>
+                <input id="th-alimony-value" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Pensão alimentícia sobre o décimo terceiro">
+              </div>
+            </div>
+            <div class="field short">
+              <label for="th-alimony-mode">Tipo</label>
+              <select id="th-alimony-mode">
+                <option value="fixed" selected>R$ fixo</option>
+                <option value="percent">% do 13º bruto</option>
+              </select>
+            </div>
+          </div>
+          <p class="field-hint spaced">A <b>1ª parcela</b> (entre 1º/02 e 30/11) é paga <b>sem descontos</b>. INSS e IRRF incidem sobre o 13º integral e são retidos na <b>2ª parcela</b>, paga até 20/12 (Lei nº 4.749/1965).</p>
+        </section>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-danger" id="th-clear">Limpar campos</button>
+        </div>
+      </form>
+
+      <aside class="results">
+        <div class="paycheck">
+          <div class="paycheck-header"><span>Demonstrativo · 13º salário</span><b id="th-months-echo">…</b></div>
+          <div class="table-scroll">
+            <table class="paycheck-table">
+              <thead>
+                <tr><th>Descrição</th><th>Ref.</th><th class="col-num">Proventos</th><th class="col-num">Descontos</th></tr>
+              </thead>
+              <tbody id="th-body">
+                <tr><td colspan="4" class="empty-state">Informe o salário base para simular o 13º.</td></tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="2">Totais</td>
+                  <td class="col-num earning" id="th-total-earnings">…</td>
+                  <td class="col-num deduction" id="th-total-deductions">…</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div class="net-card">
+          <span>13º líquido (1ª + 2ª parcelas)</span>
+          <strong id="th-net">R$ 0,00</strong>
+        </div>
+
+        <div class="chips">
+          <div class="chip"><small>1ª parcela (até 30/11)</small><b id="th-first">…</b></div>
+          <div class="chip"><small>2ª parcela (até 20/12)</small><b id="th-second">…</b></div>
+          <div class="chip"><small>Descontos totais</small><b id="th-deductions">…</b></div>
+          <div class="chip"><small>FGTS sobre o 13º</small><b id="th-fgts">…</b></div>
+        </div>
+
+        <details class="memo">
+          <summary>Memória de cálculo</summary>
+          <div class="memo-body" id="th-memo"></div>
+        </details>
+
+        <p class="note">O INSS do 13º é calculado <b>em separado</b> da folha do mês (Lei nº 8.212/1991, art. 28, § 7º) e o IRRF tem <b>tributação exclusiva na fonte</b> sobre o valor integral, já com o redutor da Lei nº 15.270/2025 (IN RFB nº 1.500/2014, arts. 13 e 65-A). O FGTS de 8% é depositado pelo empregador; <b>não é descontado</b> do valor.</p>
+      </aside>
+    </div>
+  </main>
+
+  <!-- ============================ FÉRIAS ============================ -->
+  <main id="vacation-view" hidden>
+    <div class="layout">
+      <form id="vacation-form" autocomplete="off">
+
+        <section class="panel">
+          <h2 class="panel-title">Remuneração e período de férias</h2>
+          <div class="row">
+            <div class="field">
+              <label for="vac-base-salary">Salário base (bruto mensal)</label>
+              <div class="money-field">
+                <span class="money-affix" aria-hidden="true">R$</span>
+                <input id="vac-base-salary" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Salário base bruto mensal em reais">
+              </div>
+            </div>
+            <div class="field">
+              <label for="vac-averages">Média mensal de variáveis (opcional)</label>
+              <div class="money-field">
+                <span class="money-affix" aria-hidden="true">R$</span>
+                <input id="vac-averages" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Média mensal de horas extras, comissões e adicionais">
+              </div>
+              <small class="field-hint">horas extras e comissões habituais integram as férias</small>
+            </div>
+            <div class="field short">
+              <label for="vac-days">Dias de férias (direito)</label>
+              <input id="vac-days" type="number" min="1" max="30" step="1" value="30">
+              <small class="field-hint">30 dias com até 5 faltas (CLT, art. 130)</small>
+            </div>
+            <div class="field short">
+              <label for="vac-sold-days">Dias vendidos (abono)</label>
+              <input id="vac-sold-days" type="number" min="0" max="10" step="1" value="0">
+              <small class="field-hint">até 1/3 do período (CLT, art. 143)</small>
+            </div>
+          </div>
+          <label class="check"><input type="checkbox" id="vac-advance-13th"> Adiantar a 1ª parcela do 13º salário junto com as férias (Lei nº 4.749/1965, art. 2º, § 2º)</label>
+          <p class="field-hint spaced">Faltas injustificadas reduzem o direito: <b>30 dias</b> (até 5 faltas), <b>24</b> (6 a 14), <b>18</b> (15 a 23) e <b>12</b> (24 a 32) — CLT, art. 130.</p>
+        </section>
+
+        <section class="panel">
+          <h2 class="panel-title">Imposto de renda: dependentes e pensão</h2>
+          <div class="row">
+            <div class="field short">
+              <label for="vac-dependents">Dependentes (IRRF)</label>
+              <input id="vac-dependents" type="number" min="0" step="1" value="0">
+              <small class="field-hint">R$ 189,59 cada</small>
+            </div>
+            <div class="field">
+              <label for="vac-alimony-value">Pensão alimentícia sobre férias (judicial)</label>
+              <div class="money-field" data-mode-select="vac-alimony-mode">
+                <span class="money-affix" aria-hidden="true">R$</span>
+                <input id="vac-alimony-value" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Pensão alimentícia sobre férias">
+              </div>
+            </div>
+            <div class="field short">
+              <label for="vac-alimony-mode">Tipo</label>
+              <select id="vac-alimony-mode">
+                <option value="fixed" selected>R$ fixo</option>
+                <option value="percent">% de férias + 1/3</option>
+              </select>
+            </div>
+          </div>
+          <p class="field-hint spaced">O pagamento das férias deve ser feito até <b>2 dias antes</b> do início do descanso (CLT, art. 145).</p>
+        </section>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-danger" id="vac-clear">Limpar campos</button>
+        </div>
+      </form>
+
+      <aside class="results">
+        <div class="paycheck">
+          <div class="paycheck-header"><span>Recibo de férias</span><b id="vac-days-echo">…</b></div>
+          <div class="table-scroll">
+            <table class="paycheck-table">
+              <thead>
+                <tr><th>Descrição</th><th>Ref.</th><th class="col-num">Proventos</th><th class="col-num">Descontos</th></tr>
+              </thead>
+              <tbody id="vac-body">
+                <tr><td colspan="4" class="empty-state">Informe o salário base para simular as férias.</td></tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colspan="2">Totais</td>
+                  <td class="col-num earning" id="vac-total-earnings">…</td>
+                  <td class="col-num deduction" id="vac-total-deductions">…</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div class="net-card">
+          <span>Líquido a receber</span>
+          <strong id="vac-net">R$ 0,00</strong>
+        </div>
+
+        <div class="chips">
+          <div class="chip"><small>Férias + 1/3 (tributável)</small><b id="vac-taxable">…</b></div>
+          <div class="chip"><small>Abono pecuniário (isento)</small><b id="vac-abono">…</b></div>
+          <div class="chip"><small>Descontos totais</small><b id="vac-deductions">…</b></div>
+          <div class="chip"><small>FGTS depositado</small><b id="vac-fgts">…</b></div>
+        </div>
+
+        <details class="memo">
+          <summary>Memória de cálculo</summary>
+          <div class="memo-body" id="vac-memo"></div>
+        </details>
+
+        <p class="note">As férias gozadas + 1/3 pagam INSS e IRRF, com o IRRF calculado <b>em separado</b> dos demais rendimentos do mês (RIR/2018, art. 682) e com o redutor da Lei nº 15.270/2025. O <b>abono pecuniário</b> e o terço sobre ele são <b>isentos</b> (IN RFB nº 1.500/2014, art. 62; Lei nº 8.212/1991, art. 28, § 9º). O FGTS de 8% é depositado pelo empregador; <b>não é descontado</b>.</p>
+      </aside>
+    </div>
+  </main>
+
   <!-- ============================ PARÂMETROS ============================ -->
   <main id="settings-view" hidden>
     <div class="settings-grid">
@@ -401,6 +623,21 @@
         <li><b>Horas extras, adicional noturno, insalubridade e periculosidade: CLT (Decreto-Lei nº 5.452/1943), arts. 59, 73, 192 e 193</b>
           <a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" target="_blank" rel="noopener">planalto.gov.br: CLT</a>
           <small>Reflexo dos adicionais na hora extra: Súmula 264 do TST.</small></li>
+        <li><b>13º salário: Lei nº 4.090/1962, Lei nº 4.749/1965 e Decreto nº 10.854/2021</b>
+          <a href="https://www.planalto.gov.br/ccivil_03/leis/l4090.htm" target="_blank" rel="noopener">planalto.gov.br: Lei 4.090/1962 (gratificação natalina)</a>
+          <a href="https://www.planalto.gov.br/ccivil_03/leis/l4749.htm" target="_blank" rel="noopener">planalto.gov.br: Lei 4.749/1965 (pagamento em duas parcelas)</a>
+          <a href="https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/decreto/D10854.htm" target="_blank" rel="noopener">planalto.gov.br: Decreto 10.854/2021 (regulamento trabalhista)</a>
+          <small>1/12 da remuneração por mês trabalhado (fração ≥ 15 dias conta como mês); 1ª parcela entre 1º/02 e 30/11 sem descontos, podendo ser adiantada nas férias se requerida em janeiro; 2ª parcela até 20/12, com INSS e IRRF sobre o valor integral.</small></li>
+        <li><b>Férias, abono pecuniário e terço constitucional: CLT, arts. 129 a 145; CF, art. 7º, XVII</b>
+          <a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" target="_blank" rel="noopener">planalto.gov.br: CLT (arts. 129 a 145)</a>
+          <a href="https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm" target="_blank" rel="noopener">planalto.gov.br: Constituição Federal (art. 7º, XVII)</a>
+          <small>Escala de dias por faltas injustificadas (art. 130); venda de até 1/3 dos dias (art. 143); pagamento até 2 dias antes do início (art. 145); remuneração com acréscimo de 1/3.</small></li>
+        <li><b>INSS e IRRF sobre 13º e férias: Lei nº 8.212/1991 (art. 28, §§ 7º e 9º), IN RFB nº 1.500/2014 (arts. 13, 62 e 65-A, com a redação da IN RFB nº 2.299/2025) e RIR/2018 (Decreto nº 9.580/2018, art. 682)</b>
+          <a href="https://www.planalto.gov.br/ccivil_03/leis/l8212cons.htm" target="_blank" rel="noopener">planalto.gov.br: Lei 8.212/1991 (custeio da Previdência)</a>
+          <a href="http://normas.receita.fazenda.gov.br/sijut2consulta/link.action?visao=anotado&idAto=57670" target="_blank" rel="noopener">normas.receita.fazenda.gov.br: IN RFB 1.500/2014 consolidada</a>
+          <a href="https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2025/dezembro/receita-federal-atualiza-normas-relativas-ao-imposto-sobre-a-renda-das-pessoas-fisicas" target="_blank" rel="noopener">gov.br/receitafederal: notícia oficial da IN RFB 2.299/2025</a>
+          <a href="https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/decreto/d9580.htm" target="_blank" rel="noopener">planalto.gov.br: RIR/2018 (art. 682, férias em separado)</a>
+          <small>INSS do 13º calculado em separado da folha (art. 28, § 7º); IRRF do 13º exclusivo na fonte com o redutor de 2026 (IN 1.500/2014, arts. 13 e 65-A, § 3º); férias tributadas separadamente dos demais rendimentos do mês (RIR/2018, art. 682); abono pecuniário e respectivo terço isentos de INSS (art. 28, § 9º) e de IRRF (IN 1.500/2014, art. 62).</small></li>
         <li><b>Descanso semanal remunerado (DSR): Lei nº 605/1949</b>
           <a href="https://www.planalto.gov.br/ccivil_03/leis/l0605.htm" target="_blank" rel="noopener">planalto.gov.br: texto da lei</a></li>
         <li><b>Vale-transporte (desconto de até 6%): Lei nº 7.418/1985</b>
@@ -415,6 +652,8 @@
         <li><b>INSS</b>: alíquotas progressivas por faixa sobre a remuneração (salário + extras + adicionais + DSR), limitada ao teto.</li>
         <li><b>IRRF</b>: base = rendimento tributável menos INSS, dependentes, pensão e PGBL, <i>ou</i> rendimento menos o desconto simplificado (a calculadora usa o que resultar em menos imposto, como manda a norma). Sobre o imposto apurado aplica-se o redutor da Lei 15.270/2025 conforme o rendimento tributável do mês.</li>
         <li><b>Líquido</b> = proventos (incluindo salário-família) menos INSS, IRRF, pensão, benefícios descontados, faltas e demais descontos.</li>
+        <li><b>13º salário</b> = (salário + médias) ÷ 12 × avos. 1ª parcela = 50%, sem descontos; INSS calculado em separado sobre o valor integral; IRRF exclusivo na fonte (deduções legais <i>ou</i> desconto simplificado, com o redutor da Lei 15.270/2025); 2ª parcela = integral menos INSS, IRRF e 1ª parcela.</li>
+        <li><b>Férias</b> = (salário + médias) ÷ 30 × dias gozados, mais 1/3 constitucional — base do INSS, do IRRF (cálculo em separado, com redutor) e do FGTS. Abono pecuniário (dias vendidos + 1/3) isento. Adiantamento do 13º, quando marcado, entra sem descontos e com FGTS.</li>
       </ol>
     </section>
   </main>
