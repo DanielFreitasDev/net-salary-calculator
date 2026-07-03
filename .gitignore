@@ -11,3 +11,6 @@ Thumbs.db
 # Arquivos temporários de preview/screenshots
 preview-*.html
 *.log
+
+# Firebase (cache de deploy local; firebase.json e .firebaserc são versionados)
+.firebase/
