@@ -1,899 +1,1172 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
-  <meta name="description" content="Calculadora de salário líquido CLT com as tabelas oficiais de 2026: INSS, IRRF (Lei 15.270/2025), horas extras, DSR, adicionais, FGTS e simuladores de 13º salário, férias e rescisão (com multa do FGTS e seguro-desemprego).">
-  <meta name="theme-color" content="#0E7A56" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#0C110F" media="(prefers-color-scheme: dark)">
-  <title>Calculadora de Salário Líquido · CLT 2026</title>
-  <!-- Favicon SVG inline (auto-contido, sem dependência externa): moeda com "R$" -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230E7A56'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' text-anchor='middle' fill='%23F1FBF6'%3ER$%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css">
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <meta content="light dark" name="color-scheme">
+    <meta content="Calculadora de salário líquido CLT com as tabelas oficiais de 2026: INSS, IRRF (Lei 15.270/2025), horas extras, DSR, adicionais, FGTS e simuladores de 13º salário, férias e rescisão (com multa do FGTS e seguro-desemprego)."
+          name="description">
+    <meta content="#0E7A56" media="(prefers-color-scheme: light)" name="theme-color">
+    <meta content="#0C110F" media="(prefers-color-scheme: dark)" name="theme-color">
+    <title>Calculadora de Salário Líquido · CLT 2026</title>
+    <!-- Favicon SVG inline (auto-contido, sem dependência externa): moeda com "R$" -->
+    <link href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230E7A56'/%3E%3Ctext x='16' y='22' font-family='system-ui,sans-serif' font-size='15' font-weight='700' text-anchor='middle' fill='%23F1FBF6'%3ER$%3C/text%3E%3C/svg%3E"
+          rel="icon">
+    <link href="style.css" rel="stylesheet">
 </head>
 <body>
 <div class="app">
 
-  <header class="app-header">
-    <div class="app-header-text">
-      <h1>Calculadora de salário líquido</h1>
-      <p class="app-subtitle">Folha de pagamento CLT com as tabelas oficiais vigentes: INSS progressivo, IRRF com o redutor da Lei nº 15.270/2025, horas extras com DSR, adicionais, benefícios e FGTS — com simuladores de 13º salário, férias e rescisão do contrato.</p>
-    </div>
-    <div class="app-header-tools">
-      <div class="theme-switch" role="group" aria-label="Tema da interface">
-        <button type="button" data-theme-choice="light" aria-pressed="false">Claro</button>
-        <button type="button" data-theme-choice="auto" aria-pressed="true">Auto</button>
-        <button type="button" data-theme-choice="dark" aria-pressed="false">Escuro</button>
-      </div>
-      <div class="badges">
-        <span class="badge" id="params-badge">Tabelas 2026</span>
-        <span class="badge badge-custom hidden" id="custom-badge">parâmetros personalizados</span>
-      </div>
-    </div>
-  </header>
-
-  <nav class="tabs" role="tablist" aria-label="Seções da calculadora">
-    <button role="tab" aria-selected="true" data-view="calculator-view">Calculadora</button>
-    <button role="tab" aria-selected="false" data-view="thirteenth-view">13º salário</button>
-    <button role="tab" aria-selected="false" data-view="vacation-view">Férias</button>
-    <button role="tab" aria-selected="false" data-view="severance-view">Rescisão</button>
-    <button role="tab" aria-selected="false" data-view="settings-view">Tabelas e parâmetros</button>
-    <button role="tab" aria-selected="false" data-view="sources-view">Fontes oficiais</button>
-  </nav>
-
-  <div class="net-bar" aria-hidden="true"><span>Salário líquido</span><strong id="net-salary-mini">R$ 0,00</strong></div>
-
-  <!-- ============================ CALCULADORA ============================ -->
-  <main id="calculator-view">
-    <div class="layout">
-      <form id="payroll-form" autocomplete="off">
-
-        <section class="panel">
-          <h2 class="panel-title">Salário e jornada</h2>
-          <div class="row">
-            <div class="field">
-              <label for="base-salary">Salário base (bruto mensal)</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="base-salary" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Salário base bruto mensal em reais">
-              </div>
-            </div>
-            <div class="field short">
-              <label for="work-schedule">Jornada mensal</label>
-              <select id="work-schedule">
-                <option value="220" selected>220 h (44 h/sem)</option>
-                <option value="200">200 h (40 h/sem)</option>
-                <option value="180">180 h (36 h/sem)</option>
-                <option value="150">150 h (30 h/sem)</option>
-                <option value="custom">outra…</option>
-              </select>
-            </div>
-            <div class="field short hidden" id="custom-schedule-field">
-              <label for="custom-schedule">Horas/mês</label>
-              <input id="custom-schedule" type="number" min="1" step="1" value="220">
-            </div>
-            <div class="field short">
-              <label for="reference-month">Mês de referência</label>
-              <input id="reference-month" type="month" value="2026-07">
-              <small class="field-hint">usado no DSR</small>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h2 class="panel-title">Horas extras e DSR</h2>
-          <div class="row">
-            <div class="field">
-              <label for="overtime-50">Horas extras 50%</label>
-              <input id="overtime-50" class="hours-input num" inputmode="decimal" placeholder="ex.: 49:15">
-              <small class="hours-echo" data-echo-for="overtime-50"></small>
-            </div>
-            <div class="field">
-              <label for="overtime-100">Horas extras 100%</label>
-              <input id="overtime-100" class="hours-input num" inputmode="decimal" placeholder="ex.: 8:00">
-              <small class="hours-echo" data-echo-for="overtime-100"></small>
-            </div>
-            <div class="field">
-              <label for="extra-hours">Horas com outro adicional</label>
-              <input id="extra-hours" class="hours-input num" inputmode="decimal" placeholder="ex.: 2:30">
-              <small class="hours-echo" data-echo-for="extra-hours"></small>
-            </div>
-            <div class="field short">
-              <label for="extra-rate">Adicional (%)</label>
-              <input id="extra-rate" type="number" min="0" step="1" placeholder="70">
-            </div>
-          </div>
-          <p class="field-hint spaced">Aceita <b>49:15</b> ou <b>49h15</b> (49 h e 15 min) e <b>49,25</b> (decimal). A leitura aparece abaixo do campo.</p>
-          <label class="check"><input type="checkbox" id="dsr-enabled" checked> Calcular reflexo do DSR sobre horas extras e adicional noturno (Lei 605/1949)</label>
-          <div class="row">
-            <div class="field short">
-              <label for="business-days">Dias úteis no mês</label>
-              <input id="business-days" type="number" min="1" max="27" step="1">
-              <small class="field-hint">inclui sábados</small>
-            </div>
-            <div class="field short">
-              <label for="rest-days">Domingos + feriados</label>
-              <input id="rest-days" type="number" min="0" max="10" step="1">
-              <small class="field-hint" id="holidays-hint"></small>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h2 class="panel-title">Adicionais</h2>
-          <div class="row">
-            <div class="field">
-              <label for="night-hours">Horas noturnas trabalhadas</label>
-              <input id="night-hours" class="hours-input num" inputmode="decimal" placeholder="ex.: 40:00">
-              <small class="hours-echo" data-echo-for="night-hours"></small>
-            </div>
-            <div class="field short">
-              <label for="night-rate">Adicional noturno (%)</label>
-              <input id="night-rate" type="number" min="0" step="1" value="20">
-            </div>
-          </div>
-          <label class="check"><input type="checkbox" id="night-reduced"> Aplicar hora noturna reduzida (52 min 30 s, multiplica as horas por 1,1428)</label>
-          <label class="check"><input type="checkbox" id="hazard-pay"> Adicional de periculosidade: 30% sobre o salário base (CLT, art. 193)</label>
-          <div class="row">
-            <div class="field">
-              <label for="unhealthy-level">Insalubridade (CLT, art. 192)</label>
-              <select id="unhealthy-level">
-                <option value="0" selected>não recebo</option>
-                <option value="10">grau mínimo (10%)</option>
-                <option value="20">grau médio (20%)</option>
-                <option value="40">grau máximo (40%)</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="unhealthy-base">Base da insalubridade</label>
-              <select id="unhealthy-base">
-                <option value="minimum-wage" selected>salário mínimo (regra geral)</option>
-                <option value="base-salary">salário base (se previsto em CCT)</option>
-              </select>
-            </div>
-          </div>
-          <p class="field-hint spaced">Periculosidade e insalubridade integram a base de cálculo da hora extra (Súmula 264 do TST).</p>
-        </section>
-
-        <section class="panel">
-          <h2 class="panel-title">Imposto de renda, dependentes e pensão</h2>
-          <div class="row">
-            <div class="field short">
-              <label for="ir-dependents">Dependentes (IRRF)</label>
-              <input id="ir-dependents" type="number" min="0" step="1" value="0">
-              <small class="field-hint">R$ 189,59 cada</small>
-            </div>
-            <div class="field short">
-              <label for="family-children">Filhos até 14 anos</label>
-              <input id="family-children" type="number" min="0" step="1" value="0">
-              <small class="field-hint">p/ salário-família</small>
-            </div>
-            <div class="field">
-              <label for="alimony-value">Pensão alimentícia (judicial)</label>
-              <div class="money-field" data-mode-select="alimony-mode">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="alimony-value" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Valor da pensão alimentícia">
-              </div>
-            </div>
-            <div class="field short">
-              <label for="alimony-mode">Tipo</label>
-              <select id="alimony-mode">
-                <option value="fixed" selected>R$ fixo</option>
-                <option value="percent">% do bruto tributável</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="private-pension">Previdência complementar (PGBL/Funpresp)</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="private-pension" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Previdência complementar">
-              </div>
-              <small class="field-hint">descontada em folha; deduz o IRRF</small>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h2 class="panel-title">Benefícios e descontos</h2>
-          <label class="check"><input type="checkbox" id="transport-enabled"> Uso vale-transporte (desconto de até 6% do salário base, Lei 7.418/1985)</label>
-          <div class="row">
-            <div class="field">
-              <label for="transport-cost">Custo mensal do VT (opcional)</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="transport-cost" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Custo mensal do vale-transporte">
-              </div>
-              <small class="field-hint">se menor que 6%, desconta o custo</small>
-            </div>
-            <div class="field">
-              <label for="meal-discount">Coparticipação VR/VA</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="meal-discount" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Coparticipação em vale-refeição ou alimentação">
-              </div>
-            </div>
-            <div class="field">
-              <label for="health-plan">Plano de saúde / odonto</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="health-plan" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Plano de saúde ou odontológico">
-              </div>
-              <small class="field-hint">não deduz IRRF mensal; só na declaração anual</small>
-            </div>
-          </div>
-          <div class="row">
-            <div class="field">
-              <label for="advance-value">Adiantamento salarial já recebido</label>
-              <div class="money-field" data-mode-select="advance-mode">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="advance-value" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Adiantamento salarial já recebido">
-              </div>
-            </div>
-            <div class="field short">
-              <label for="advance-mode">Tipo</label>
-              <select id="advance-mode">
-                <option value="fixed" selected>R$ fixo</option>
-                <option value="percent">% do salário base</option>
-              </select>
-            </div>
-            <div class="field short">
-              <label for="absence-days">Faltas (dias)</label>
-              <input id="absence-days" type="number" min="0" step="1" value="0">
-            </div>
-            <div class="field short">
-              <label for="lost-rest-days">DSRs perdidos</label>
-              <input id="lost-rest-days" type="number" min="0" step="1" value="0">
-              <small class="field-hint">1 por semana com falta</small>
-            </div>
-          </div>
-          <h3 class="panel-subtitle">Outros descontos (empréstimo consignado, sindicato, farmácia…)</h3>
-          <div class="dynamic-list" id="deductions-list"></div>
-          <button type="button" class="btn btn-small" id="add-deduction">+ adicionar desconto</button>
-        </section>
-
-        <section class="panel">
-          <h2 class="panel-title">Outros proventos (comissões, bônus, gratificações…)</h2>
-          <div class="dynamic-list" id="earnings-list"></div>
-          <button type="button" class="btn btn-small" id="add-earning">+ adicionar provento</button>
-          <p class="field-hint spaced">Marque sobre quais bases cada valor incide. Comissões e gratificações habituais em regra incidem em todas; verbas indenizatórias (ex.: ajuda de custo) em nenhuma.</p>
-        </section>
-
-        <div class="form-actions">
-          <button type="button" class="btn btn-danger" id="clear-form">Limpar campos</button>
+    <header class="app-header">
+        <div class="app-header-text">
+            <h1>Calculadora de salário líquido</h1>
+            <p class="app-subtitle">Folha de pagamento CLT com as tabelas oficiais vigentes: INSS progressivo, IRRF com
+                o redutor da Lei nº 15.270/2025, horas extras com DSR, adicionais, benefícios e FGTS — com simuladores
+                de 13º salário, férias e rescisão do contrato.</p>
         </div>
-      </form>
-
-      <aside class="results">
-        <div class="paycheck">
-          <div class="paycheck-header"><span>Demonstrativo de pagamento</span><b id="paycheck-month">…</b></div>
-          <div class="table-scroll">
-            <table class="paycheck-table">
-              <thead>
-                <tr><th>Descrição</th><th>Ref.</th><th class="col-num">Proventos</th><th class="col-num">Descontos</th></tr>
-              </thead>
-              <tbody id="paycheck-body">
-                <tr><td colspan="4" class="empty-state">Informe o salário base para começar.</td></tr>
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colspan="2">Totais</td>
-                  <td class="col-num earning" id="total-earnings">…</td>
-                  <td class="col-num deduction" id="total-deductions">…</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+        <div class="app-header-tools">
+            <div aria-label="Tema da interface" class="theme-switch" role="group">
+                <button aria-pressed="false" data-theme-choice="light" type="button">Claro</button>
+                <button aria-pressed="true" data-theme-choice="auto" type="button">Auto</button>
+                <button aria-pressed="false" data-theme-choice="dark" type="button">Escuro</button>
+            </div>
+            <div class="badges">
+                <span class="badge" id="params-badge">Tabelas 2026</span>
+                <span class="badge badge-custom hidden" id="custom-badge">parâmetros personalizados</span>
+            </div>
         </div>
+    </header>
 
-        <div class="net-card">
-          <span>Salário líquido</span>
-          <strong id="net-salary">R$ 0,00</strong>
-        </div>
+    <nav aria-label="Seções da calculadora" class="tabs" role="tablist">
+        <button aria-selected="true" data-view="calculator-view" role="tab">Calculadora</button>
+        <button aria-selected="false" data-view="thirteenth-view" role="tab">13º salário</button>
+        <button aria-selected="false" data-view="vacation-view" role="tab">Férias</button>
+        <button aria-selected="false" data-view="severance-view" role="tab">Rescisão</button>
+        <button aria-selected="false" data-view="settings-view" role="tab">Tabelas e parâmetros</button>
+        <button aria-selected="false" data-view="sources-view" role="tab">Fontes oficiais</button>
+    </nav>
 
-        <div class="chips">
-          <div class="chip"><small>INSS efetivo</small><b id="inss-rate">…</b></div>
-          <div class="chip"><small>IRRF efetivo</small><b id="irrf-rate">…</b></div>
-          <div class="chip"><small>Descontos totais</small><b id="deductions-rate">…</b></div>
-          <div class="chip"><small>FGTS do mês</small><b id="fgts-amount">…</b></div>
-        </div>
-
-        <details class="memo">
-          <summary>Memória de cálculo</summary>
-          <div class="memo-body" id="calc-memo"></div>
-        </details>
-
-        <p class="note">O FGTS (8%) é depositado pelo empregador na sua conta vinculada; <b>não é descontado</b> do salário. Esta ferramenta estima a folha mensal padrão. Convenções coletivas podem alterar percentuais e bases; confira sempre com o RH ou a contabilidade.</p>
-      </aside>
-    </div>
-  </main>
-
-  <!-- ============================ 13º SALÁRIO ============================ -->
-  <main id="thirteenth-view" hidden>
-    <div class="layout">
-      <form id="thirteenth-form" autocomplete="off">
-
-        <section class="panel">
-          <h2 class="panel-title">Remuneração e avos</h2>
-          <div class="row">
-            <div class="field">
-              <label for="th-base-salary">Salário base (bruto mensal)</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="th-base-salary" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Salário base bruto mensal em reais">
-              </div>
-            </div>
-            <div class="field">
-              <label for="th-averages">Média mensal de variáveis (opcional)</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="th-averages" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Média mensal de horas extras, comissões e adicionais">
-              </div>
-              <small class="field-hint">horas extras e comissões habituais integram o 13º</small>
-            </div>
-            <div class="field short">
-              <label for="th-months">Meses trabalhados (avos)</label>
-              <input id="th-months" type="number" min="1" max="12" step="1" value="12">
-              <small class="field-hint">fração ≥ 15 dias conta como mês</small>
-            </div>
-          </div>
-          <p class="field-hint spaced">O 13º equivale a <b>1/12 da remuneração por mês trabalhado</b> no ano (Lei nº 4.090/1962). Quem trabalhou o ano inteiro usa <b>12 avos</b>; admitido em julho, por exemplo, usa 6.</p>
-        </section>
-
-        <section class="panel">
-          <h2 class="panel-title">Imposto de renda: dependentes e pensão</h2>
-          <div class="row">
-            <div class="field short">
-              <label for="th-dependents">Dependentes (IRRF)</label>
-              <input id="th-dependents" type="number" min="0" step="1" value="0">
-              <small class="field-hint">R$ 189,59 cada</small>
-            </div>
-            <div class="field">
-              <label for="th-alimony-value">Pensão alimentícia sobre o 13º (judicial)</label>
-              <div class="money-field" data-mode-select="th-alimony-mode">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="th-alimony-value" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Pensão alimentícia sobre o décimo terceiro">
-              </div>
-            </div>
-            <div class="field short">
-              <label for="th-alimony-mode">Tipo</label>
-              <select id="th-alimony-mode">
-                <option value="fixed" selected>R$ fixo</option>
-                <option value="percent">% do 13º bruto</option>
-              </select>
-            </div>
-          </div>
-          <p class="field-hint spaced">A <b>1ª parcela</b> (entre 1º/02 e 30/11) é paga <b>sem descontos</b>. INSS e IRRF incidem sobre o 13º integral e são retidos na <b>2ª parcela</b>, paga até 20/12 (Lei nº 4.749/1965).</p>
-        </section>
-
-        <div class="form-actions">
-          <button type="button" class="btn btn-danger" id="th-clear">Limpar campos</button>
-        </div>
-      </form>
-
-      <aside class="results">
-        <div class="paycheck">
-          <div class="paycheck-header"><span>Demonstrativo · 13º salário</span><b id="th-months-echo">…</b></div>
-          <div class="table-scroll">
-            <table class="paycheck-table">
-              <thead>
-                <tr><th>Descrição</th><th>Ref.</th><th class="col-num">Proventos</th><th class="col-num">Descontos</th></tr>
-              </thead>
-              <tbody id="th-body">
-                <tr><td colspan="4" class="empty-state">Informe o salário base para simular o 13º.</td></tr>
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colspan="2">Totais</td>
-                  <td class="col-num earning" id="th-total-earnings">…</td>
-                  <td class="col-num deduction" id="th-total-deductions">…</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-
-        <div class="net-card">
-          <span>13º líquido (1ª + 2ª parcelas)</span>
-          <strong id="th-net">R$ 0,00</strong>
-        </div>
-
-        <div class="chips">
-          <div class="chip"><small>1ª parcela (até 30/11)</small><b id="th-first">…</b></div>
-          <div class="chip"><small>2ª parcela (até 20/12)</small><b id="th-second">…</b></div>
-          <div class="chip"><small>Descontos totais</small><b id="th-deductions">…</b></div>
-          <div class="chip"><small>FGTS sobre o 13º</small><b id="th-fgts">…</b></div>
-        </div>
-
-        <details class="memo">
-          <summary>Memória de cálculo</summary>
-          <div class="memo-body" id="th-memo"></div>
-        </details>
-
-        <p class="note">O INSS do 13º é calculado <b>em separado</b> da folha do mês (Lei nº 8.212/1991, art. 28, § 7º) e o IRRF tem <b>tributação exclusiva na fonte</b> sobre o valor integral, já com o redutor da Lei nº 15.270/2025 (IN RFB nº 1.500/2014, arts. 13 e 65-A). O FGTS de 8% é depositado pelo empregador; <b>não é descontado</b> do valor.</p>
-      </aside>
-    </div>
-  </main>
-
-  <!-- ============================ FÉRIAS ============================ -->
-  <main id="vacation-view" hidden>
-    <div class="layout">
-      <form id="vacation-form" autocomplete="off">
-
-        <section class="panel">
-          <h2 class="panel-title">Remuneração e período de férias</h2>
-          <div class="row">
-            <div class="field">
-              <label for="vac-base-salary">Salário base (bruto mensal)</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="vac-base-salary" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Salário base bruto mensal em reais">
-              </div>
-            </div>
-            <div class="field">
-              <label for="vac-averages">Média mensal de variáveis (opcional)</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="vac-averages" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Média mensal de horas extras, comissões e adicionais">
-              </div>
-              <small class="field-hint">horas extras e comissões habituais integram as férias</small>
-            </div>
-            <div class="field short">
-              <label for="vac-days">Dias de férias (direito)</label>
-              <input id="vac-days" type="number" min="1" max="30" step="1" value="30">
-              <small class="field-hint">30 dias com até 5 faltas (CLT, art. 130)</small>
-            </div>
-            <div class="field short">
-              <label for="vac-sold-days">Dias vendidos (abono)</label>
-              <input id="vac-sold-days" type="number" min="0" max="10" step="1" value="0">
-              <small class="field-hint">até 1/3 do período (CLT, art. 143)</small>
-            </div>
-          </div>
-          <label class="check"><input type="checkbox" id="vac-advance-13th"> Adiantar a 1ª parcela do 13º salário junto com as férias (Lei nº 4.749/1965, art. 2º, § 2º)</label>
-          <p class="field-hint spaced">Faltas injustificadas reduzem o direito: <b>30 dias</b> (até 5 faltas), <b>24</b> (6 a 14), <b>18</b> (15 a 23) e <b>12</b> (24 a 32) — CLT, art. 130.</p>
-        </section>
-
-        <section class="panel">
-          <h2 class="panel-title">Imposto de renda: dependentes e pensão</h2>
-          <div class="row">
-            <div class="field short">
-              <label for="vac-dependents">Dependentes (IRRF)</label>
-              <input id="vac-dependents" type="number" min="0" step="1" value="0">
-              <small class="field-hint">R$ 189,59 cada</small>
-            </div>
-            <div class="field">
-              <label for="vac-alimony-value">Pensão alimentícia sobre férias (judicial)</label>
-              <div class="money-field" data-mode-select="vac-alimony-mode">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="vac-alimony-value" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Pensão alimentícia sobre férias">
-              </div>
-            </div>
-            <div class="field short">
-              <label for="vac-alimony-mode">Tipo</label>
-              <select id="vac-alimony-mode">
-                <option value="fixed" selected>R$ fixo</option>
-                <option value="percent">% de férias + 1/3</option>
-              </select>
-            </div>
-          </div>
-          <p class="field-hint spaced">O pagamento das férias deve ser feito até <b>2 dias antes</b> do início do descanso (CLT, art. 145).</p>
-        </section>
-
-        <div class="form-actions">
-          <button type="button" class="btn btn-danger" id="vac-clear">Limpar campos</button>
-        </div>
-      </form>
-
-      <aside class="results">
-        <div class="paycheck">
-          <div class="paycheck-header"><span>Recibo de férias</span><b id="vac-days-echo">…</b></div>
-          <div class="table-scroll">
-            <table class="paycheck-table">
-              <thead>
-                <tr><th>Descrição</th><th>Ref.</th><th class="col-num">Proventos</th><th class="col-num">Descontos</th></tr>
-              </thead>
-              <tbody id="vac-body">
-                <tr><td colspan="4" class="empty-state">Informe o salário base para simular as férias.</td></tr>
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colspan="2">Totais</td>
-                  <td class="col-num earning" id="vac-total-earnings">…</td>
-                  <td class="col-num deduction" id="vac-total-deductions">…</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-
-        <div class="net-card">
-          <span>Líquido a receber</span>
-          <strong id="vac-net">R$ 0,00</strong>
-        </div>
-
-        <div class="chips">
-          <div class="chip"><small>Férias + 1/3 (tributável)</small><b id="vac-taxable">…</b></div>
-          <div class="chip"><small>Abono pecuniário (isento)</small><b id="vac-abono">…</b></div>
-          <div class="chip"><small>Descontos totais</small><b id="vac-deductions">…</b></div>
-          <div class="chip"><small>FGTS depositado</small><b id="vac-fgts">…</b></div>
-        </div>
-
-        <details class="memo">
-          <summary>Memória de cálculo</summary>
-          <div class="memo-body" id="vac-memo"></div>
-        </details>
-
-        <p class="note">As férias gozadas + 1/3 pagam INSS e IRRF, com o IRRF calculado <b>em separado</b> dos demais rendimentos do mês (RIR/2018, art. 682) e com o redutor da Lei nº 15.270/2025. O <b>abono pecuniário</b> e o terço sobre ele são <b>isentos</b> (IN RFB nº 1.500/2014, art. 62; Lei nº 8.212/1991, art. 28, § 9º). O FGTS de 8% é depositado pelo empregador; <b>não é descontado</b>.</p>
-      </aside>
-    </div>
-  </main>
-
-  <!-- ============================ RESCISÃO ============================ -->
-  <main id="severance-view" hidden>
-    <div class="layout">
-      <form id="severance-form" autocomplete="off">
-
-        <section class="panel">
-          <h2 class="panel-title">Contrato e modalidade</h2>
-          <div class="row">
-            <div class="field">
-              <label for="sev-base-salary">Salário base (bruto mensal)</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="sev-base-salary" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Salário base bruto mensal em reais">
-              </div>
-            </div>
-            <div class="field">
-              <label for="sev-averages">Média mensal de variáveis (opcional)</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="sev-averages" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Média mensal de horas extras, comissões e adicionais">
-              </div>
-              <small class="field-hint">integra aviso, 13º e férias (CLT, art. 487, § 3º)</small>
-            </div>
-          </div>
-          <div class="row">
-            <div class="field">
-              <label for="sev-admission">Data de admissão</label>
-              <input id="sev-admission" type="date" class="num" aria-label="Data de admissão">
-            </div>
-            <div class="field">
-              <label for="sev-termination">Último dia de trabalho</label>
-              <input id="sev-termination" type="date" class="num" aria-label="Último dia de trabalho (data do desligamento)">
-              <small class="field-hint">com aviso trabalhado, é o último dia dele</small>
-            </div>
-          </div>
-          <div class="row">
-            <div class="field">
-              <label for="sev-type">Tipo de rescisão</label>
-              <select id="sev-type">
-                <option value="no-cause" selected>Sem justa causa (empregador demite)</option>
-                <option value="agreement">Acordo entre as partes (art. 484-A)</option>
-                <option value="resignation">Pedido de demissão</option>
-                <option value="with-cause">Justa causa (art. 482)</option>
-                <option value="indirect">Rescisão indireta (art. 483)</option>
-                <option value="mutual-fault">Culpa recíproca (art. 484)</option>
-                <option value="term-end">Fim do contrato de experiência/termo</option>
-                <option value="term-early-employer">Antecipada pelo empregador (art. 479)</option>
-                <option value="term-early-employee">Antecipada pelo empregado (art. 480)</option>
-                <option value="death">Falecimento do empregado</option>
-              </select>
-              <small class="field-hint">contrato de experiência = prazo determinado</small>
-            </div>
-            <div class="field" id="sev-notice-employer-field">
-              <label for="sev-notice-employer">Aviso prévio</label>
-              <select id="sev-notice-employer">
-                <option value="indemnified" selected>indenizado (recebe sem trabalhar)</option>
-                <option value="worked">trabalhado (cumprido em serviço)</option>
-              </select>
-            </div>
-            <div class="field hidden" id="sev-notice-employee-field">
-              <label for="sev-notice-employee">Aviso prévio do empregado</label>
-              <select id="sev-notice-employee">
-                <option value="worked" selected>cumprido (trabalhou os 30 dias)</option>
-                <option value="waived">dispensado pela empresa</option>
-                <option value="deducted">não cumprido (desconta 30 dias)</option>
-              </select>
-            </div>
-            <div class="field hidden" id="sev-contract-end-field">
-              <label for="sev-contract-end">Fim previsto do contrato a termo</label>
-              <input id="sev-contract-end" type="date" class="num" aria-label="Data prevista para o fim do contrato por prazo determinado">
-              <small class="field-hint">para a indenização dos arts. 479/480</small>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h2 class="panel-title">Férias pendentes e FGTS</h2>
-          <div class="row">
-            <div class="field short">
-              <label for="sev-expired-periods">Férias vencidas (períodos)</label>
-              <input id="sev-expired-periods" type="number" min="0" max="3" step="1" value="0">
-              <small class="field-hint">períodos de 12 meses não gozados</small>
-            </div>
-            <div class="field">
-              <label for="sev-fgts-balance">Saldo atual do FGTS (opcional)</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="sev-fgts-balance" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Saldo atual da conta vinculada do FGTS">
-              </div>
-              <small class="field-hint">consulte no app FGTS; vazio = estimativa</small>
-            </div>
-            <div class="field">
-              <label for="sev-fgts-withdrawn">Saques anteriores no contrato (opcional)</label>
-              <div class="money-field">
-                <span class="money-affix" aria-hidden="true">R$</span>
-                <input id="sev-fgts-withdrawn" class="money-input num" inputmode="decimal" placeholder="0,00" aria-label="Valores já sacados do FGTS durante este contrato">
-              </div>
-              <small class="field-hint">ex.: saque-aniversário; entram na base da multa</small>
-            </div>
-          </div>
-          <label class="check"><input type="checkbox" id="sev-expired-double"> Férias vencidas em dobro: período concessivo estourado (CLT, art. 137)</label>
-        </section>
-
-        <section class="panel">
-          <h2 class="panel-title">Imposto de renda e seguro-desemprego</h2>
-          <div class="row">
-            <div class="field short">
-              <label for="sev-dependents">Dependentes (IRRF)</label>
-              <input id="sev-dependents" type="number" min="0" step="1" value="0">
-              <small class="field-hint">R$ 189,59 cada</small>
-            </div>
-            <div class="field" id="sev-request-field">
-              <label for="sev-request">Solicitação do seguro-desemprego</label>
-              <select id="sev-request">
-                <option value="1" selected>primeira vez</option>
-                <option value="2">segunda vez</option>
-                <option value="3">terceira vez ou mais</option>
-              </select>
-              <small class="field-hint">muda a carência e o nº de parcelas</small>
-            </div>
-          </div>
-          <p class="field-hint spaced">O IRRF na rescisão incide apenas sobre o <b>saldo de salário</b> e o <b>13º proporcional</b> (exclusivo na fonte). Aviso indenizado, férias + 1/3 e multa do FGTS são <b>isentos</b>.</p>
-        </section>
-
-        <div class="form-actions">
-          <button type="button" class="btn btn-danger" id="sev-clear">Limpar campos</button>
-        </div>
-      </form>
-
-      <aside class="results">
-        <div class="paycheck">
-          <div class="paycheck-header"><span>Termo de rescisão (simulação)</span><b id="sev-type-echo">…</b></div>
-          <div class="table-scroll">
-            <table class="paycheck-table">
-              <thead>
-                <tr><th>Descrição</th><th>Ref.</th><th class="col-num">Proventos</th><th class="col-num">Descontos</th></tr>
-              </thead>
-              <tbody id="sev-body">
-                <tr><td colspan="4" class="empty-state">Informe o salário, a data de admissão e o último dia de trabalho.</td></tr>
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colspan="2">Totais</td>
-                  <td class="col-num earning" id="sev-total-earnings">…</td>
-                  <td class="col-num deduction" id="sev-total-deductions">…</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-
-        <div class="net-card">
-          <span>Líquido da rescisão</span>
-          <strong id="sev-net">R$ 0,00</strong>
-        </div>
-
-        <div class="paycheck">
-          <div class="paycheck-header"><span>FGTS e seguro-desemprego</span><b id="sev-months-echo">…</b></div>
-          <div class="table-scroll">
-            <table class="paycheck-table">
-              <tbody id="sev-extra-body">
-                <tr><td colspan="2" class="empty-state">Aguardando os dados do contrato.</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="chips">
-          <div class="chip"><small>FGTS: saque liberado</small><b id="sev-fgts-available">…</b></div>
-          <div class="chip"><small>Multa do FGTS</small><b id="sev-fgts-fine">…</b></div>
-          <div class="chip"><small>Seguro-desemprego</small><b id="sev-unemployment">…</b></div>
-          <div class="chip"><small>Total geral estimado</small><b id="sev-grand-total">…</b></div>
-        </div>
-
-        <details class="memo">
-          <summary>Memória de cálculo</summary>
-          <div class="memo-body" id="sev-memo"></div>
-        </details>
-
-        <p class="note">As verbas rescisórias devem ser pagas em até <b>10 dias corridos</b> do término do contrato (CLT, art. 477, § 6º). A <b>multa do FGTS</b> é depositada na conta vinculada e sacada na CAIXA junto com o saldo liberado — <b>não sai no líquido</b> pago pela empresa. Estimativa simplificada: convenções coletivas, médias exatas, juros/atualização do FGTS e vínculos anteriores (para o seguro-desemprego) podem alterar os valores.</p>
-      </aside>
-    </div>
-  </main>
-
-  <!-- ============================ PARÂMETROS ============================ -->
-  <main id="settings-view" hidden>
-    <div class="settings-grid">
-      <section class="panel">
-        <h2 class="panel-title">INSS: contribuição progressiva (empregados)</h2>
-        <table class="settings-table">
-          <thead><tr><th>Faixa até (R$)</th><th>Alíquota (%)</th><th></th></tr></thead>
-          <tbody id="inss-brackets-body"></tbody>
-        </table>
-        <button type="button" class="btn btn-small" id="add-inss-bracket">+ faixa</button>
-        <p class="field-hint spaced" id="inss-note"></p>
-      </section>
-
-      <section class="panel">
-        <h2 class="panel-title">IRRF: tabela progressiva mensal</h2>
-        <table class="settings-table">
-          <thead><tr><th>Base até (R$)</th><th>Alíquota (%)</th><th>Parcela a deduzir (R$)</th><th></th></tr></thead>
-          <tbody id="irrf-brackets-body"></tbody>
-        </table>
-        <button type="button" class="btn btn-small" id="add-irrf-bracket">+ faixa</button>
-        <p class="field-hint spaced">Deixe “Base até” vazio na última faixa (sem limite).</p>
-      </section>
-
-      <section class="panel">
-        <h2 class="panel-title">Redutor da Lei nº 15.270/2025</h2>
-        <table class="settings-table">
-          <tbody>
-            <tr><td>Isenção total até (R$/mês)</td><td><input id="reduction-exempt-limit" inputmode="decimal"></td></tr>
-            <tr><td>Redução parcial até (R$/mês)</td><td><input id="reduction-upper-limit" inputmode="decimal"></td></tr>
-            <tr><td>Constante da fórmula (R$)</td><td><input id="reduction-constant" inputmode="decimal"></td></tr>
-            <tr><td>Coeficiente da fórmula</td><td><input id="reduction-rate" inputmode="decimal"></td></tr>
-          </tbody>
-        </table>
-        <p class="field-hint spaced">Redução = constante menos (coeficiente × rendimento tributável), limitada ao imposto apurado. Vigente: 978,62 menos (0,133145 × rendimento).</p>
-      </section>
-
-      <section class="panel">
-        <h2 class="panel-title">Demais parâmetros</h2>
-        <table class="settings-table">
-          <tbody>
-            <tr><td>Ano de vigência (rótulo)</td><td><input id="params-year"></td></tr>
-            <tr><td>Salário mínimo (R$)</td><td><input id="minimum-wage" inputmode="decimal"></td></tr>
-            <tr><td>Dedução por dependente, IRRF (R$)</td><td><input id="dependent-deduction" inputmode="decimal"></td></tr>
-            <tr><td>Desconto simplificado, IRRF (R$)</td><td><input id="simplified-deduction" inputmode="decimal"></td></tr>
-            <tr><td>Salário-família: cota por filho (R$)</td><td><input id="family-quota" inputmode="decimal"></td></tr>
-            <tr><td>Salário-família: limite de remuneração (R$)</td><td><input id="family-limit" inputmode="decimal"></td></tr>
-            <tr><td>FGTS (%)</td><td><input id="fgts-rate-input" inputmode="decimal"></td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section class="panel">
-        <h2 class="panel-title">Rescisão: aviso prévio e multa do FGTS</h2>
-        <table class="settings-table">
-          <tbody>
-            <tr><td>Aviso prévio: base (dias)</td><td><input id="notice-base-days" inputmode="numeric"></td></tr>
-            <tr><td>Aviso prévio: acréscimo por ano completo (dias)</td><td><input id="notice-per-year-days" inputmode="numeric"></td></tr>
-            <tr><td>Aviso prévio: máximo (dias)</td><td><input id="notice-max-days" inputmode="numeric"></td></tr>
-            <tr><td>Multa do FGTS: dispensa sem justa causa (%)</td><td><input id="fgts-fine-percent" inputmode="decimal"></td></tr>
-            <tr><td>Multa do FGTS: acordo e culpa recíproca (%)</td><td><input id="fgts-agreement-fine-percent" inputmode="decimal"></td></tr>
-          </tbody>
-        </table>
-        <p class="field-hint spaced">Aviso: Lei nº 12.506/2011 (30 + 3 por ano, máx. 90). Multas: Lei nº 8.036/1990, art. 18, §§ 1º e 2º.</p>
-      </section>
-
-      <section class="panel">
-        <h2 class="panel-title">Seguro-desemprego (faixas do MTE)</h2>
-        <table class="settings-table">
-          <tbody>
-            <tr><td>Faixa 1: salário médio até (R$)</td><td><input id="su-first-limit" inputmode="decimal"></td></tr>
-            <tr><td>Faixa 1: fator multiplicador</td><td><input id="su-first-factor" inputmode="decimal"></td></tr>
-            <tr><td>Faixa 2: salário médio até (R$)</td><td><input id="su-second-limit" inputmode="decimal"></td></tr>
-            <tr><td>Faixa 2: parcela fixa (R$)</td><td><input id="su-second-base" inputmode="decimal"></td></tr>
-            <tr><td>Faixa 2: fator sobre o excedente</td><td><input id="su-second-factor" inputmode="decimal"></td></tr>
-            <tr><td>Teto da parcela (R$)</td><td><input id="su-ceiling" inputmode="decimal"></td></tr>
-          </tbody>
-        </table>
-        <p class="field-hint spaced">Tabela do MTE vigente desde 11/01/2026 (Lei nº 7.998/1990). O piso da parcela é o salário mínimo informado acima; o valor final é arredondado para o inteiro superior (art. 4º, § 4º).</p>
-      </section>
+    <div aria-hidden="true" class="net-bar"><span>Salário líquido</span><strong id="net-salary-mini">R$ 0,00</strong>
     </div>
 
-    <div class="settings-actions">
-      <button type="button" class="btn btn-primary" id="save-settings">Salvar alterações neste navegador</button>
-      <button type="button" class="btn" id="reset-settings">Restaurar padrões 2026</button>
-      <button type="button" class="btn" id="export-settings">Gerar JSON (backup)</button>
-      <button type="button" class="btn" id="import-settings">Aplicar JSON colado abaixo</button>
-      <span class="settings-feedback hidden" id="settings-saved-note" role="status">Salvo ✓</span>
-      <span class="settings-feedback is-error hidden" id="settings-error-note" role="alert"></span>
-    </div>
-    <textarea class="settings-json" id="settings-json" spellcheck="false" placeholder="O JSON de backup aparece aqui. Você também pode colar um JSON e clicar em “Aplicar”."></textarea>
+    <!-- ============================ CALCULADORA ============================ -->
+    <main id="calculator-view">
+        <div class="layout">
+            <form autocomplete="off" id="payroll-form">
 
-    <section class="panel spaced-top">
-      <h2 class="panel-title">Como manter os dados atualizados (checklist de janeiro)</h2>
-      <ol class="steps">
-        <li><b>Salário mínimo</b>: decreto publicado no fim de dezembro (Planalto/DOU). Atualize o campo “Salário mínimo”. Em 2026: R$ 1.621,00 (Decreto nº 12.797/2025).</li>
-        <li><b>INSS, teto e salário-família</b>: Portaria Interministerial MPS/MF publicada em janeiro (em 2026, a Portaria nº 13, de 09/01/2026). Atualize as 4 faixas do INSS e os dois campos do salário-família.</li>
-        <li><b>IRRF</b>: confira a página “Tabelas” da Receita Federal. A tabela progressiva, a dedução por dependente e o desconto simplificado só mudam quando há lei ou MP nova; o redutor da Lei 15.270/2025 tem valores fixos até que a lei seja alterada.</li>
-        <li><b>Seguro-desemprego</b>: o MTE reajusta as faixas em janeiro (pelo INPC, com vigência em 11/01). Atualize os campos da seção “Seguro-desemprego” com a notícia oficial do gov.br/trabalho-e-emprego.</li>
-        <li>Clique em <b>Salvar alterações</b> e gere um JSON de backup. Os links diretos estão na aba “Fontes oficiais”.</li>
-      </ol>
-    </section>
-  </main>
+                <section class="panel">
+                    <h2 class="panel-title">Salário e jornada</h2>
+                    <div class="row">
+                        <div class="field">
+                            <label for="base-salary">Salário base (bruto mensal)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Salário base bruto mensal em reais" class="money-input num" id="base-salary" inputmode="decimal"
+                                       placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="field short">
+                            <label for="work-schedule">Jornada mensal</label>
+                            <select id="work-schedule">
+                                <option selected value="220">220 h (44 h/sem)</option>
+                                <option value="200">200 h (40 h/sem)</option>
+                                <option value="180">180 h (36 h/sem)</option>
+                                <option value="150">150 h (30 h/sem)</option>
+                                <option value="custom">outra…</option>
+                            </select>
+                        </div>
+                        <div class="field short hidden" id="custom-schedule-field">
+                            <label for="custom-schedule">Horas/mês</label>
+                            <input id="custom-schedule" min="1" step="1" type="number" value="220">
+                        </div>
+                        <div class="field short">
+                            <label for="reference-month">Mês de referência</label>
+                            <input id="reference-month" type="month" value="2026-07">
+                            <small class="field-hint">usado no DSR</small>
+                        </div>
+                    </div>
+                </section>
 
-  <!-- ============================ FONTES ============================ -->
-  <main id="sources-view" hidden>
-    <section class="panel">
-      <h2 class="panel-title">Fontes oficiais utilizadas (valores vigentes em 2026)</h2>
-      <ul class="sources-list">
-        <li><b>Tabela INSS 2026, teto e salário-família: Portaria Interministerial MPS/MF nº 13, de 09/01/2026</b>
-          <a href="https://www.gov.br/previdencia/pt-br/assuntos/rpps/documentos/PortariaInterministerialMPSMF13de9dejaneirode2026.pdf" target="_blank" rel="noopener">gov.br/previdencia: PDF da portaria</a>
-          <a href="https://www.gov.br/inss/pt-br/assuntos/com-reajuste-de-3-9-teto-do-inss-chega-a-r-8-475-55-em-2026" target="_blank" rel="noopener">gov.br/inss: notícia oficial do reajuste (teto R$ 8.475,55)</a>
-          <small>Faixas: 7,5% até R$ 1.621,00; 9% até R$ 2.902,84; 12% até R$ 4.354,27; 14% até R$ 8.475,55. Salário-família: R$ 67,54 por filho, para remuneração até R$ 1.980,38.</small></li>
-        <li><b>Tabela IRRF mensal 2026, dependente e desconto simplificado: Receita Federal</b>
-          <a href="https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/tabelas/2026" target="_blank" rel="noopener">gov.br/receitafederal: tabelas de tributação 2026</a>
-          <small>Isento até R$ 2.428,80; alíquotas de 7,5%, 15%, 22,5% e 27,5% (parcela a deduzir até R$ 908,73). Dependente: R$ 189,59/mês. Desconto simplificado: R$ 607,20.</small></li>
-        <li><b>Isenção até R$ 5.000 e redutor até R$ 7.350: Lei nº 15.270, de 26/11/2025</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2025/lei/l15270.htm" target="_blank" rel="noopener">planalto.gov.br: texto da lei</a>
-          <a href="https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/tabelas/exemplos-de-aplicacao-da-lei-15-270-2025" target="_blank" rel="noopener">Receita Federal: exemplos oficiais de aplicação</a>
-          <small>Redução = R$ 978,62 menos (0,133145 × rendimentos tributáveis mensais), limitada ao imposto apurado; zera o IRRF até R$ 5.000.</small></li>
-        <li><b>Salário mínimo 2026 (R$ 1.621,00): Decreto nº 12.797, de 23/12/2025</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2025/decreto/d12797.htm" target="_blank" rel="noopener">planalto.gov.br: texto do decreto</a></li>
-        <li><b>FGTS 8%: Lei nº 8.036/1990, art. 15</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/leis/l8036consol.htm" target="_blank" rel="noopener">planalto.gov.br: lei consolidada</a></li>
-        <li><b>Horas extras, adicional noturno, insalubridade e periculosidade: CLT (Decreto-Lei nº 5.452/1943), arts. 59, 73, 192 e 193</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" target="_blank" rel="noopener">planalto.gov.br: CLT</a>
-          <small>Reflexo dos adicionais na hora extra: Súmula 264 do TST.</small></li>
-        <li><b>13º salário: Lei nº 4.090/1962, Lei nº 4.749/1965 e Decreto nº 10.854/2021</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/leis/l4090.htm" target="_blank" rel="noopener">planalto.gov.br: Lei 4.090/1962 (gratificação natalina)</a>
-          <a href="https://www.planalto.gov.br/ccivil_03/leis/l4749.htm" target="_blank" rel="noopener">planalto.gov.br: Lei 4.749/1965 (pagamento em duas parcelas)</a>
-          <a href="https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/decreto/D10854.htm" target="_blank" rel="noopener">planalto.gov.br: Decreto 10.854/2021 (regulamento trabalhista)</a>
-          <small>1/12 da remuneração por mês trabalhado (fração ≥ 15 dias conta como mês); 1ª parcela entre 1º/02 e 30/11 sem descontos, podendo ser adiantada nas férias se requerida em janeiro; 2ª parcela até 20/12, com INSS e IRRF sobre o valor integral.</small></li>
-        <li><b>Férias, abono pecuniário e terço constitucional: CLT, arts. 129 a 145; CF, art. 7º, XVII</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" target="_blank" rel="noopener">planalto.gov.br: CLT (arts. 129 a 145)</a>
-          <a href="https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm" target="_blank" rel="noopener">planalto.gov.br: Constituição Federal (art. 7º, XVII)</a>
-          <small>Escala de dias por faltas injustificadas (art. 130); venda de até 1/3 dos dias (art. 143); pagamento até 2 dias antes do início (art. 145); remuneração com acréscimo de 1/3.</small></li>
-        <li><b>INSS e IRRF sobre 13º e férias: Lei nº 8.212/1991 (art. 28, §§ 7º e 9º), IN RFB nº 1.500/2014 (arts. 13, 62 e 65-A, com a redação da IN RFB nº 2.299/2025) e RIR/2018 (Decreto nº 9.580/2018, art. 682)</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/leis/l8212cons.htm" target="_blank" rel="noopener">planalto.gov.br: Lei 8.212/1991 (custeio da Previdência)</a>
-          <a href="http://normas.receita.fazenda.gov.br/sijut2consulta/link.action?visao=anotado&idAto=57670" target="_blank" rel="noopener">normas.receita.fazenda.gov.br: IN RFB 1.500/2014 consolidada</a>
-          <a href="https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2025/dezembro/receita-federal-atualiza-normas-relativas-ao-imposto-sobre-a-renda-das-pessoas-fisicas" target="_blank" rel="noopener">gov.br/receitafederal: notícia oficial da IN RFB 2.299/2025</a>
-          <a href="https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/decreto/d9580.htm" target="_blank" rel="noopener">planalto.gov.br: RIR/2018 (art. 682, férias em separado)</a>
-          <small>INSS do 13º calculado em separado da folha (art. 28, § 7º); IRRF do 13º exclusivo na fonte com o redutor de 2026 (IN 1.500/2014, arts. 13 e 65-A, § 3º); férias tributadas separadamente dos demais rendimentos do mês (RIR/2018, art. 682); abono pecuniário e respectivo terço isentos de INSS (art. 28, § 9º) e de IRRF (IN 1.500/2014, art. 62).</small></li>
-        <li><b>Rescisão do contrato: CLT, arts. 477 a 486 (prazos, justa causa, rescisão indireta, culpa recíproca, contratos a termo) e art. 484-A (acordo mútuo, Lei nº 13.467/2017)</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" target="_blank" rel="noopener">planalto.gov.br: CLT</a>
-          <small>Pagamento das verbas em até 10 dias do término (art. 477, § 6º), sob multa de um salário (§ 8º). Acordo: metade do aviso indenizado, multa de 20%, saque de até 80% e sem seguro-desemprego (art. 484-A). Contratos a termo: indenização de metade dos dias restantes (art. 479) ou possível indenização ao empregador (art. 480). Culpa recíproca: metade do aviso, do 13º e das férias proporcionais (art. 484; Súmula 14 do TST). Férias na rescisão: arts. 146 e 147 e Súmulas 171 e 261 do TST.</small></li>
-        <li><b>Aviso prévio proporcional: Lei nº 12.506/2011</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2011/lei/l12506.htm" target="_blank" rel="noopener">planalto.gov.br: texto da lei</a>
-          <small>30 dias + 3 por ano completo de serviço, limitado a 90 (Nota Técnica MTE nº 184/2012). O aviso indenizado projeta o contrato para 13º e férias (CLT, art. 487, § 1º), recebe FGTS (Súmula 305 do TST) e não sofre INSS (STJ, Tema 478; IN RFB nº 2.110/2022, art. 34) nem IRRF (Lei nº 7.713/1988, art. 6º, V).</small></li>
-        <li><b>FGTS na rescisão — multa e saque: Lei nº 8.036/1990, arts. 18 e 20</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/leis/l8036consol.htm" target="_blank" rel="noopener">planalto.gov.br: lei consolidada</a>
-          <small>Multa de 40% sobre todos os depósitos do contrato na dispensa sem justa causa (art. 18, § 1º) e de 20% na culpa recíproca e no acordo (art. 18, § 2º; CLT, art. 484-A). Saque: dispensa sem justa causa (inclusive indireta), fim do contrato a termo, culpa recíproca e falecimento (art. 20); no acordo, movimentação limitada a 80% da conta (CLT, art. 484-A, § 1º).</small></li>
-        <li><b>Seguro-desemprego: Lei nº 7.998/1990 (com a Lei nº 13.134/2015) e tabela do MTE vigente desde 11/01/2026</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/leis/l7998.htm" target="_blank" rel="noopener">planalto.gov.br: Lei 7.998/1990</a>
-          <a href="https://www.gov.br/trabalho-e-emprego/pt-br/noticias-e-conteudo/2026/janeiro/mte-reajusta-valores-do-beneficio-seguro-desemprego" target="_blank" rel="noopener">gov.br/trabalho-e-emprego: valores reajustados para 2026</a>
-          <small>Carência: 12 meses nos últimos 18 (1ª solicitação), 9 nos últimos 12 (2ª) ou 6 meses (demais) — art. 3º. Parcelas: 3 a 5 conforme os meses trabalhados nos últimos 36 (art. 4º, § 2º; fração ≥ 15 dias conta, § 3º). Faixas 2026: até R$ 2.222,17 → média × 0,8; até R$ 3.703,99 → R$ 1.777,74 + 50% do excedente; acima → teto de R$ 2.518,65; piso = salário mínimo; parcela arredondada ao inteiro superior (§ 4º).</small></li>
-        <li><b>Isenções das verbas rescisórias: Lei nº 7.713/1988, art. 6º, V (aviso indenizado, indenizações, FGTS e multa) e Lei nº 8.212/1991, art. 28, § 9º (férias indenizadas)</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/leis/l7713.htm" target="_blank" rel="noopener">planalto.gov.br: Lei 7.713/1988</a>
-          <small>Férias vencidas e proporcionais pagas na rescisão + 1/3 são isentas de IRRF (Súmulas 125 e 386 do STJ; IN RFB nº 1.500/2014, art. 62) e de INSS (art. 28, § 9º, “d”). Saldo de salário e 13º proporcional são tributados normalmente (13º em separado, com IRRF exclusivo na fonte).</small></li>
-        <li><b>Descanso semanal remunerado (DSR): Lei nº 605/1949</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/leis/l0605.htm" target="_blank" rel="noopener">planalto.gov.br: texto da lei</a></li>
-        <li><b>Vale-transporte (desconto de até 6%): Lei nº 7.418/1985</b>
-          <a href="https://www.planalto.gov.br/ccivil_03/leis/l7418.htm" target="_blank" rel="noopener">planalto.gov.br: texto da lei</a></li>
-      </ul>
-    </section>
-    <section class="panel">
-      <h2 class="panel-title">Metodologia do cálculo</h2>
-      <ol class="steps">
-        <li><b>Valor-hora</b> = (salário base + periculosidade + insalubridade) ÷ jornada mensal.</li>
-        <li><b>Horas extras</b> = valor-hora × (1 + adicional) × horas. <b>DSR</b> = (soma das verbas variáveis ÷ dias úteis) × (domingos + feriados).</li>
-        <li><b>INSS</b>: alíquotas progressivas por faixa sobre a remuneração (salário + extras + adicionais + DSR), limitada ao teto.</li>
-        <li><b>IRRF</b>: base = rendimento tributável menos INSS, dependentes, pensão e PGBL, <i>ou</i> rendimento menos o desconto simplificado (a calculadora usa o que resultar em menos imposto, como manda a norma). Sobre o imposto apurado aplica-se o redutor da Lei 15.270/2025 conforme o rendimento tributável do mês.</li>
-        <li><b>Líquido</b> = proventos (incluindo salário-família) menos INSS, IRRF, pensão, benefícios descontados, faltas e demais descontos.</li>
-        <li><b>13º salário</b> = (salário + médias) ÷ 12 × avos. 1ª parcela = 50%, sem descontos; INSS calculado em separado sobre o valor integral; IRRF exclusivo na fonte (deduções legais <i>ou</i> desconto simplificado, com o redutor da Lei 15.270/2025); 2ª parcela = integral menos INSS, IRRF e 1ª parcela.</li>
-        <li><b>Férias</b> = (salário + médias) ÷ 30 × dias gozados, mais 1/3 constitucional — base do INSS, do IRRF (cálculo em separado, com redutor) e do FGTS. Abono pecuniário (dias vendidos + 1/3) isento. Adiantamento do 13º, quando marcado, entra sem descontos e com FGTS.</li>
-        <li><b>Rescisão</b> = saldo de salário (dias ÷ 30) + aviso prévio (30 + 3/ano, indenizado projeta 13º e férias) + 13º proporcional (avos de fração ≥ 15 dias; INSS e IRRF em separado) + férias vencidas e proporcionais + 1/3 (isentas) ± particularidades da modalidade (metades no acordo e na culpa recíproca; indenizações dos arts. 479/480; perdas na justa causa; desconto do aviso não cumprido no pedido). <b>FGTS</b>: depósitos de 8% sobre saldo, 13º e aviso indenizado; multa de 40%/20% sobre todos os depósitos do contrato; liberação conforme a modalidade (80% no acordo). <b>Seguro-desemprego</b>: carência e nº de parcelas da Lei 7.998/1990 e faixas oficiais do MTE, com piso no salário mínimo e teto.</li>
-      </ol>
-    </section>
-  </main>
+                <section class="panel">
+                    <h2 class="panel-title">Horas extras e DSR</h2>
+                    <div class="row">
+                        <div class="field">
+                            <label for="overtime-50">Horas extras 50%</label>
+                            <input class="hours-input num" id="overtime-50" inputmode="decimal"
+                                   placeholder="ex.: 49:15">
+                            <small class="hours-echo" data-echo-for="overtime-50"></small>
+                        </div>
+                        <div class="field">
+                            <label for="overtime-100">Horas extras 100%</label>
+                            <input class="hours-input num" id="overtime-100" inputmode="decimal"
+                                   placeholder="ex.: 8:00">
+                            <small class="hours-echo" data-echo-for="overtime-100"></small>
+                        </div>
+                        <div class="field">
+                            <label for="extra-hours">Horas com outro adicional</label>
+                            <input class="hours-input num" id="extra-hours" inputmode="decimal" placeholder="ex.: 2:30">
+                            <small class="hours-echo" data-echo-for="extra-hours"></small>
+                        </div>
+                        <div class="field short">
+                            <label for="extra-rate">Adicional (%)</label>
+                            <input id="extra-rate" min="0" placeholder="70" step="1" type="number">
+                        </div>
+                    </div>
+                    <p class="field-hint spaced">Aceita <b>49:15</b> ou <b>49h15</b> (49 h e 15 min) e <b>49,25</b>
+                        (decimal). A leitura aparece abaixo do campo.</p>
+                    <label class="check"><input checked id="dsr-enabled" type="checkbox"> Calcular reflexo do DSR sobre
+                        horas extras e adicional noturno (Lei 605/1949)</label>
+                    <div class="row">
+                        <div class="field short">
+                            <label for="business-days">Dias úteis no mês</label>
+                            <input id="business-days" max="27" min="1" step="1" type="number">
+                            <small class="field-hint">inclui sábados</small>
+                        </div>
+                        <div class="field short">
+                            <label for="rest-days">Domingos + feriados</label>
+                            <input id="rest-days" max="10" min="0" step="1" type="number">
+                            <small class="field-hint" id="holidays-hint"></small>
+                        </div>
+                    </div>
+                </section>
 
-  <footer class="app-footer">
-    Ferramenta de estimativa construída com dados oficiais (Receita Federal, INSS/MPS, Planalto). Não substitui o cálculo da contabilidade
-    da empresa, que pode aplicar regras de convenção coletiva, médias e arredondamentos próprios. Valores salvos apenas neste navegador.
-  </footer>
+                <section class="panel">
+                    <h2 class="panel-title">Adicionais</h2>
+                    <div class="row">
+                        <div class="field">
+                            <label for="night-hours">Horas noturnas trabalhadas</label>
+                            <input class="hours-input num" id="night-hours" inputmode="decimal"
+                                   placeholder="ex.: 40:00">
+                            <small class="hours-echo" data-echo-for="night-hours"></small>
+                        </div>
+                        <div class="field short">
+                            <label for="night-rate">Adicional noturno (%)</label>
+                            <input id="night-rate" min="0" step="1" type="number" value="20">
+                        </div>
+                    </div>
+                    <label class="check"><input id="night-reduced" type="checkbox"> Aplicar hora noturna reduzida (52
+                        min 30 s, multiplica as horas por 1,1428)</label>
+                    <label class="check"><input id="hazard-pay" type="checkbox"> Adicional de periculosidade: 30% sobre
+                        o salário base (CLT, art. 193)</label>
+                    <div class="row">
+                        <div class="field">
+                            <label for="unhealthy-level">Insalubridade (CLT, art. 192)</label>
+                            <select id="unhealthy-level">
+                                <option selected value="0">não recebo</option>
+                                <option value="10">grau mínimo (10%)</option>
+                                <option value="20">grau médio (20%)</option>
+                                <option value="40">grau máximo (40%)</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="unhealthy-base">Base da insalubridade</label>
+                            <select id="unhealthy-base">
+                                <option selected value="minimum-wage">salário mínimo (regra geral)</option>
+                                <option value="base-salary">salário base (se previsto em CCT)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p class="field-hint spaced">Periculosidade e insalubridade integram a base de cálculo da hora extra
+                        (Súmula 264 do TST).</p>
+                </section>
+
+                <section class="panel">
+                    <h2 class="panel-title">Imposto de renda, dependentes e pensão</h2>
+                    <div class="row">
+                        <div class="field short">
+                            <label for="ir-dependents">Dependentes (IRRF)</label>
+                            <input id="ir-dependents" min="0" step="1" type="number" value="0">
+                            <small class="field-hint">R$ 189,59 cada</small>
+                        </div>
+                        <div class="field short">
+                            <label for="family-children">Filhos até 14 anos</label>
+                            <input id="family-children" min="0" step="1" type="number" value="0">
+                            <small class="field-hint">p/ salário-família</small>
+                        </div>
+                        <div class="field">
+                            <label for="alimony-value">Pensão alimentícia (judicial)</label>
+                            <div class="money-field" data-mode-select="alimony-mode">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Valor da pensão alimentícia" class="money-input num" id="alimony-value" inputmode="decimal"
+                                       placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="field short">
+                            <label for="alimony-mode">Tipo</label>
+                            <select id="alimony-mode">
+                                <option selected value="fixed">R$ fixo</option>
+                                <option value="percent">% do bruto tributável</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="private-pension">Previdência complementar (PGBL/Funpresp)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Previdência complementar" class="money-input num" id="private-pension"
+                                       inputmode="decimal" placeholder="0,00">
+                            </div>
+                            <small class="field-hint">descontada em folha; deduz o IRRF</small>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <h2 class="panel-title">Benefícios e descontos</h2>
+                    <label class="check"><input id="transport-enabled" type="checkbox"> Uso vale-transporte (desconto de
+                        até 6% do salário base, Lei 7.418/1985)</label>
+                    <div class="row">
+                        <div class="field">
+                            <label for="transport-cost">Custo mensal do VT (opcional)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Custo mensal do vale-transporte" class="money-input num" id="transport-cost"
+                                       inputmode="decimal" placeholder="0,00">
+                            </div>
+                            <small class="field-hint">se menor que 6%, desconta o custo</small>
+                        </div>
+                        <div class="field">
+                            <label for="meal-discount">Coparticipação VR/VA</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Coparticipação em vale-refeição ou alimentação" class="money-input num" id="meal-discount" inputmode="decimal"
+                                       placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="health-plan">Plano de saúde / odonto</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Plano de saúde ou odontológico" class="money-input num" id="health-plan" inputmode="decimal"
+                                       placeholder="0,00">
+                            </div>
+                            <small class="field-hint">não deduz IRRF mensal; só na declaração anual</small>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="field">
+                            <label for="advance-value">Adiantamento salarial já recebido</label>
+                            <div class="money-field" data-mode-select="advance-mode">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Adiantamento salarial já recebido" class="money-input num" id="advance-value" inputmode="decimal"
+                                       placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="field short">
+                            <label for="advance-mode">Tipo</label>
+                            <select id="advance-mode">
+                                <option selected value="fixed">R$ fixo</option>
+                                <option value="percent">% do salário base</option>
+                            </select>
+                        </div>
+                        <div class="field short">
+                            <label for="absence-days">Faltas (dias)</label>
+                            <input id="absence-days" min="0" step="1" type="number" value="0">
+                        </div>
+                        <div class="field short">
+                            <label for="lost-rest-days">DSRs perdidos</label>
+                            <input id="lost-rest-days" min="0" step="1" type="number" value="0">
+                            <small class="field-hint">1 por semana com falta</small>
+                        </div>
+                    </div>
+                    <h3 class="panel-subtitle">Outros descontos (empréstimo consignado, sindicato, farmácia…)</h3>
+                    <div class="dynamic-list" id="deductions-list"></div>
+                    <button class="btn btn-small" id="add-deduction" type="button">+ adicionar desconto</button>
+                </section>
+
+                <section class="panel">
+                    <h2 class="panel-title">Outros proventos (comissões, bônus, gratificações…)</h2>
+                    <div class="dynamic-list" id="earnings-list"></div>
+                    <button class="btn btn-small" id="add-earning" type="button">+ adicionar provento</button>
+                    <p class="field-hint spaced">Marque sobre quais bases cada valor incide. Comissões e gratificações
+                        habituais em regra incidem em todas; verbas indenizatórias (ex.: ajuda de custo) em nenhuma.</p>
+                </section>
+
+                <div class="form-actions">
+                    <button class="btn btn-danger" id="clear-form" type="button">Limpar campos</button>
+                </div>
+            </form>
+
+            <aside class="results">
+                <div class="paycheck">
+                    <div class="paycheck-header"><span>Demonstrativo de pagamento</span><b id="paycheck-month">…</b>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="paycheck-table">
+                            <thead>
+                            <tr>
+                                <th>Descrição</th>
+                                <th>Ref.</th>
+                                <th class="col-num">Proventos</th>
+                                <th class="col-num">Descontos</th>
+                            </tr>
+                            </thead>
+                            <tbody id="paycheck-body">
+                            <tr>
+                                <td class="empty-state" colspan="4">Informe o salário base para começar.</td>
+                            </tr>
+                            </tbody>
+                            <tfoot>
+                            <tr>
+                                <td colspan="2">Totais</td>
+                                <td class="col-num earning" id="total-earnings">…</td>
+                                <td class="col-num deduction" id="total-deductions">…</td>
+                            </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="net-card">
+                    <span>Salário líquido</span>
+                    <strong id="net-salary">R$ 0,00</strong>
+                </div>
+
+                <div class="chips">
+                    <div class="chip"><small>INSS efetivo</small><b id="inss-rate">…</b></div>
+                    <div class="chip"><small>IRRF efetivo</small><b id="irrf-rate">…</b></div>
+                    <div class="chip"><small>Descontos totais</small><b id="deductions-rate">…</b></div>
+                    <div class="chip"><small>FGTS do mês</small><b id="fgts-amount">…</b></div>
+                </div>
+
+                <details class="memo">
+                    <summary>Memória de cálculo</summary>
+                    <div class="memo-body" id="calc-memo"></div>
+                </details>
+
+                <p class="note">O FGTS (8%) é depositado pelo empregador na sua conta vinculada; <b>não é descontado</b>
+                    do salário. Esta ferramenta estima a folha mensal padrão. Convenções coletivas podem alterar
+                    percentuais e bases; confira sempre com o RH ou a contabilidade.</p>
+            </aside>
+        </div>
+    </main>
+
+    <!-- ============================ 13º SALÁRIO ============================ -->
+    <main hidden id="thirteenth-view">
+        <div class="layout">
+            <form autocomplete="off" id="thirteenth-form">
+
+                <section class="panel">
+                    <h2 class="panel-title">Remuneração e avos</h2>
+                    <div class="row">
+                        <div class="field">
+                            <label for="th-base-salary">Salário base (bruto mensal)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Salário base bruto mensal em reais" class="money-input num" id="th-base-salary"
+                                       inputmode="decimal" placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="th-averages">Média mensal de variáveis (opcional)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Média mensal de horas extras, comissões e adicionais" class="money-input num" id="th-averages" inputmode="decimal"
+                                       placeholder="0,00">
+                            </div>
+                            <small class="field-hint">horas extras e comissões habituais integram o 13º</small>
+                        </div>
+                        <div class="field short">
+                            <label for="th-months">Meses trabalhados (avos)</label>
+                            <input id="th-months" max="12" min="1" step="1" type="number" value="12">
+                            <small class="field-hint">fração ≥ 15 dias conta como mês</small>
+                        </div>
+                    </div>
+                    <p class="field-hint spaced">O 13º equivale a <b>1/12 da remuneração por mês trabalhado</b> no ano
+                        (Lei nº 4.090/1962). Quem trabalhou o ano inteiro usa <b>12 avos</b>; admitido em julho, por
+                        exemplo, usa 6.</p>
+                </section>
+
+                <section class="panel">
+                    <h2 class="panel-title">Imposto de renda: dependentes e pensão</h2>
+                    <div class="row">
+                        <div class="field short">
+                            <label for="th-dependents">Dependentes (IRRF)</label>
+                            <input id="th-dependents" min="0" step="1" type="number" value="0">
+                            <small class="field-hint">R$ 189,59 cada</small>
+                        </div>
+                        <div class="field">
+                            <label for="th-alimony-value">Pensão alimentícia sobre o 13º (judicial)</label>
+                            <div class="money-field" data-mode-select="th-alimony-mode">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Pensão alimentícia sobre o décimo terceiro" class="money-input num" id="th-alimony-value"
+                                       inputmode="decimal" placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="field short">
+                            <label for="th-alimony-mode">Tipo</label>
+                            <select id="th-alimony-mode">
+                                <option selected value="fixed">R$ fixo</option>
+                                <option value="percent">% do 13º bruto</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p class="field-hint spaced">A <b>1ª parcela</b> (entre 1º/02 e 30/11) é paga <b>sem descontos</b>.
+                        INSS e IRRF incidem sobre o 13º integral e são retidos na <b>2ª parcela</b>, paga até 20/12 (Lei
+                        nº 4.749/1965).</p>
+                </section>
+
+                <div class="form-actions">
+                    <button class="btn btn-danger" id="th-clear" type="button">Limpar campos</button>
+                </div>
+            </form>
+
+            <aside class="results">
+                <div class="paycheck">
+                    <div class="paycheck-header"><span>Demonstrativo · 13º salário</span><b id="th-months-echo">…</b>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="paycheck-table">
+                            <thead>
+                            <tr>
+                                <th>Descrição</th>
+                                <th>Ref.</th>
+                                <th class="col-num">Proventos</th>
+                                <th class="col-num">Descontos</th>
+                            </tr>
+                            </thead>
+                            <tbody id="th-body">
+                            <tr>
+                                <td class="empty-state" colspan="4">Informe o salário base para simular o 13º.</td>
+                            </tr>
+                            </tbody>
+                            <tfoot>
+                            <tr>
+                                <td colspan="2">Totais</td>
+                                <td class="col-num earning" id="th-total-earnings">…</td>
+                                <td class="col-num deduction" id="th-total-deductions">…</td>
+                            </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="net-card">
+                    <span>13º líquido (1ª + 2ª parcelas)</span>
+                    <strong id="th-net">R$ 0,00</strong>
+                </div>
+
+                <div class="chips">
+                    <div class="chip"><small>1ª parcela (até 30/11)</small><b id="th-first">…</b></div>
+                    <div class="chip"><small>2ª parcela (até 20/12)</small><b id="th-second">…</b></div>
+                    <div class="chip"><small>Descontos totais</small><b id="th-deductions">…</b></div>
+                    <div class="chip"><small>FGTS sobre o 13º</small><b id="th-fgts">…</b></div>
+                </div>
+
+                <details class="memo">
+                    <summary>Memória de cálculo</summary>
+                    <div class="memo-body" id="th-memo"></div>
+                </details>
+
+                <p class="note">O INSS do 13º é calculado <b>em separado</b> da folha do mês (Lei nº 8.212/1991, art.
+                    28, § 7º) e o IRRF tem <b>tributação exclusiva na fonte</b> sobre o valor integral, já com o redutor
+                    da Lei nº 15.270/2025 (IN RFB nº 1.500/2014, arts. 13 e 65-A). O FGTS de 8% é depositado pelo
+                    empregador; <b>não é descontado</b> do valor.</p>
+            </aside>
+        </div>
+    </main>
+
+    <!-- ============================ FÉRIAS ============================ -->
+    <main hidden id="vacation-view">
+        <div class="layout">
+            <form autocomplete="off" id="vacation-form">
+
+                <section class="panel">
+                    <h2 class="panel-title">Remuneração e período de férias</h2>
+                    <div class="row">
+                        <div class="field">
+                            <label for="vac-base-salary">Salário base (bruto mensal)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Salário base bruto mensal em reais" class="money-input num" id="vac-base-salary"
+                                       inputmode="decimal" placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="vac-averages">Média mensal de variáveis (opcional)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Média mensal de horas extras, comissões e adicionais" class="money-input num" id="vac-averages" inputmode="decimal"
+                                       placeholder="0,00">
+                            </div>
+                            <small class="field-hint">horas extras e comissões habituais integram as férias</small>
+                        </div>
+                        <div class="field short">
+                            <label for="vac-days">Dias de férias (direito)</label>
+                            <input id="vac-days" max="30" min="1" step="1" type="number" value="30">
+                            <small class="field-hint">30 dias com até 5 faltas (CLT, art. 130)</small>
+                        </div>
+                        <div class="field short">
+                            <label for="vac-sold-days">Dias vendidos (abono)</label>
+                            <input id="vac-sold-days" max="10" min="0" step="1" type="number" value="0">
+                            <small class="field-hint">até 1/3 do período (CLT, art. 143)</small>
+                        </div>
+                    </div>
+                    <label class="check"><input id="vac-advance-13th" type="checkbox"> Adiantar a 1ª parcela do 13º
+                        salário junto com as férias (Lei nº 4.749/1965, art. 2º, § 2º)</label>
+                    <p class="field-hint spaced">Faltas injustificadas reduzem o direito: <b>30 dias</b> (até 5 faltas),
+                        <b>24</b> (6 a 14), <b>18</b> (15 a 23) e <b>12</b> (24 a 32) — CLT, art. 130.</p>
+                </section>
+
+                <section class="panel">
+                    <h2 class="panel-title">Imposto de renda: dependentes e pensão</h2>
+                    <div class="row">
+                        <div class="field short">
+                            <label for="vac-dependents">Dependentes (IRRF)</label>
+                            <input id="vac-dependents" min="0" step="1" type="number" value="0">
+                            <small class="field-hint">R$ 189,59 cada</small>
+                        </div>
+                        <div class="field">
+                            <label for="vac-alimony-value">Pensão alimentícia sobre férias (judicial)</label>
+                            <div class="money-field" data-mode-select="vac-alimony-mode">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Pensão alimentícia sobre férias" class="money-input num" id="vac-alimony-value"
+                                       inputmode="decimal" placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="field short">
+                            <label for="vac-alimony-mode">Tipo</label>
+                            <select id="vac-alimony-mode">
+                                <option selected value="fixed">R$ fixo</option>
+                                <option value="percent">% de férias + 1/3</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p class="field-hint spaced">O pagamento das férias deve ser feito até <b>2 dias antes</b> do início
+                        do descanso (CLT, art. 145).</p>
+                </section>
+
+                <div class="form-actions">
+                    <button class="btn btn-danger" id="vac-clear" type="button">Limpar campos</button>
+                </div>
+            </form>
+
+            <aside class="results">
+                <div class="paycheck">
+                    <div class="paycheck-header"><span>Recibo de férias</span><b id="vac-days-echo">…</b></div>
+                    <div class="table-scroll">
+                        <table class="paycheck-table">
+                            <thead>
+                            <tr>
+                                <th>Descrição</th>
+                                <th>Ref.</th>
+                                <th class="col-num">Proventos</th>
+                                <th class="col-num">Descontos</th>
+                            </tr>
+                            </thead>
+                            <tbody id="vac-body">
+                            <tr>
+                                <td class="empty-state" colspan="4">Informe o salário base para simular as férias.</td>
+                            </tr>
+                            </tbody>
+                            <tfoot>
+                            <tr>
+                                <td colspan="2">Totais</td>
+                                <td class="col-num earning" id="vac-total-earnings">…</td>
+                                <td class="col-num deduction" id="vac-total-deductions">…</td>
+                            </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="net-card">
+                    <span>Líquido a receber</span>
+                    <strong id="vac-net">R$ 0,00</strong>
+                </div>
+
+                <div class="chips">
+                    <div class="chip"><small>Férias + 1/3 (tributável)</small><b id="vac-taxable">…</b></div>
+                    <div class="chip"><small>Abono pecuniário (isento)</small><b id="vac-abono">…</b></div>
+                    <div class="chip"><small>Descontos totais</small><b id="vac-deductions">…</b></div>
+                    <div class="chip"><small>FGTS depositado</small><b id="vac-fgts">…</b></div>
+                </div>
+
+                <details class="memo">
+                    <summary>Memória de cálculo</summary>
+                    <div class="memo-body" id="vac-memo"></div>
+                </details>
+
+                <p class="note">As férias gozadas + 1/3 pagam INSS e IRRF, com o IRRF calculado <b>em separado</b> dos
+                    demais rendimentos do mês (RIR/2018, art. 682) e com o redutor da Lei nº 15.270/2025. O <b>abono
+                        pecuniário</b> e o terço sobre ele são <b>isentos</b> (IN RFB nº 1.500/2014, art. 62; Lei nº
+                    8.212/1991, art. 28, § 9º). O FGTS de 8% é depositado pelo empregador; <b>não é descontado</b>.</p>
+            </aside>
+        </div>
+    </main>
+
+    <!-- ============================ RESCISÃO ============================ -->
+    <main hidden id="severance-view">
+        <div class="layout">
+            <form autocomplete="off" id="severance-form">
+
+                <section class="panel">
+                    <h2 class="panel-title">Contrato e modalidade</h2>
+                    <div class="row">
+                        <div class="field">
+                            <label for="sev-base-salary">Salário base (bruto mensal)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Salário base bruto mensal em reais" class="money-input num" id="sev-base-salary"
+                                       inputmode="decimal" placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="sev-averages">Média mensal de variáveis (opcional)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Média mensal de horas extras, comissões e adicionais" class="money-input num" id="sev-averages" inputmode="decimal"
+                                       placeholder="0,00">
+                            </div>
+                            <small class="field-hint">integra aviso, 13º e férias (CLT, art. 487, § 3º)</small>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="field">
+                            <label for="sev-admission">Data de admissão</label>
+                            <input aria-label="Data de admissão" class="num" id="sev-admission" type="date">
+                        </div>
+                        <div class="field">
+                            <label for="sev-termination">Último dia de trabalho</label>
+                            <input aria-label="Último dia de trabalho (data do desligamento)" class="num" id="sev-termination"
+                                   type="date">
+                            <small class="field-hint">com aviso trabalhado, é o último dia dele</small>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="field">
+                            <label for="sev-type">Tipo de rescisão</label>
+                            <select id="sev-type">
+                                <option selected value="no-cause">Sem justa causa (empregador demite)</option>
+                                <option value="agreement">Acordo entre as partes (art. 484-A)</option>
+                                <option value="resignation">Pedido de demissão</option>
+                                <option value="with-cause">Justa causa (art. 482)</option>
+                                <option value="indirect">Rescisão indireta (art. 483)</option>
+                                <option value="mutual-fault">Culpa recíproca (art. 484)</option>
+                                <option value="term-end">Fim do contrato de experiência/termo</option>
+                                <option value="term-early-employer">Antecipada pelo empregador (art. 479)</option>
+                                <option value="term-early-employee">Antecipada pelo empregado (art. 480)</option>
+                                <option value="death">Falecimento do empregado</option>
+                            </select>
+                            <small class="field-hint">contrato de experiência = prazo determinado</small>
+                        </div>
+                        <div class="field" id="sev-notice-employer-field">
+                            <label for="sev-notice-employer">Aviso prévio</label>
+                            <select id="sev-notice-employer">
+                                <option selected value="indemnified">indenizado (recebe sem trabalhar)</option>
+                                <option value="worked">trabalhado (cumprido em serviço)</option>
+                            </select>
+                        </div>
+                        <div class="field hidden" id="sev-notice-employee-field">
+                            <label for="sev-notice-employee">Aviso prévio do empregado</label>
+                            <select id="sev-notice-employee">
+                                <option selected value="worked">cumprido (trabalhou os 30 dias)</option>
+                                <option value="waived">dispensado pela empresa</option>
+                                <option value="deducted">não cumprido (desconta 30 dias)</option>
+                            </select>
+                        </div>
+                        <div class="field hidden" id="sev-contract-end-field">
+                            <label for="sev-contract-end">Fim previsto do contrato a termo</label>
+                            <input aria-label="Data prevista para o fim do contrato por prazo determinado" class="num" id="sev-contract-end"
+                                   type="date">
+                            <small class="field-hint">para a indenização dos arts. 479/480</small>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <h2 class="panel-title">Férias pendentes e FGTS</h2>
+                    <div class="row">
+                        <div class="field short">
+                            <label for="sev-expired-periods">Férias vencidas (períodos)</label>
+                            <input id="sev-expired-periods" max="3" min="0" step="1" type="number" value="0">
+                            <small class="field-hint">períodos de 12 meses não gozados</small>
+                        </div>
+                        <div class="field">
+                            <label for="sev-fgts-balance">Saldo atual do FGTS (opcional)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Saldo atual da conta vinculada do FGTS" class="money-input num" id="sev-fgts-balance"
+                                       inputmode="decimal" placeholder="0,00">
+                            </div>
+                            <small class="field-hint">consulte no app FGTS; vazio = estimativa</small>
+                        </div>
+                        <div class="field">
+                            <label for="sev-fgts-withdrawn">Saques anteriores no contrato (opcional)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Valores já sacados do FGTS durante este contrato" class="money-input num" id="sev-fgts-withdrawn"
+                                       inputmode="decimal" placeholder="0,00">
+                            </div>
+                            <small class="field-hint">ex.: saque-aniversário; entram na base da multa</small>
+                        </div>
+                    </div>
+                    <label class="check"><input id="sev-expired-double" type="checkbox"> Férias vencidas em dobro:
+                        período concessivo estourado (CLT, art. 137)</label>
+                </section>
+
+                <section class="panel">
+                    <h2 class="panel-title">Imposto de renda e seguro-desemprego</h2>
+                    <div class="row">
+                        <div class="field short">
+                            <label for="sev-dependents">Dependentes (IRRF)</label>
+                            <input id="sev-dependents" min="0" step="1" type="number" value="0">
+                            <small class="field-hint">R$ 189,59 cada</small>
+                        </div>
+                        <div class="field" id="sev-request-field">
+                            <label for="sev-request">Solicitação do seguro-desemprego</label>
+                            <select id="sev-request">
+                                <option selected value="1">primeira vez</option>
+                                <option value="2">segunda vez</option>
+                                <option value="3">terceira vez ou mais</option>
+                            </select>
+                            <small class="field-hint">muda a carência e o nº de parcelas</small>
+                        </div>
+                    </div>
+                    <p class="field-hint spaced">O IRRF na rescisão incide apenas sobre o <b>saldo de salário</b> e o
+                        <b>13º proporcional</b> (exclusivo na fonte). Aviso indenizado, férias + 1/3 e multa do FGTS são
+                        <b>isentos</b>.</p>
+                </section>
+
+                <div class="form-actions">
+                    <button class="btn btn-danger" id="sev-clear" type="button">Limpar campos</button>
+                </div>
+            </form>
+
+            <aside class="results">
+                <div class="paycheck">
+                    <div class="paycheck-header"><span>Termo de rescisão (simulação)</span><b id="sev-type-echo">…</b>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="paycheck-table">
+                            <thead>
+                            <tr>
+                                <th>Descrição</th>
+                                <th>Ref.</th>
+                                <th class="col-num">Proventos</th>
+                                <th class="col-num">Descontos</th>
+                            </tr>
+                            </thead>
+                            <tbody id="sev-body">
+                            <tr>
+                                <td class="empty-state" colspan="4">Informe o salário, a data de admissão e o último dia
+                                    de trabalho.
+                                </td>
+                            </tr>
+                            </tbody>
+                            <tfoot>
+                            <tr>
+                                <td colspan="2">Totais</td>
+                                <td class="col-num earning" id="sev-total-earnings">…</td>
+                                <td class="col-num deduction" id="sev-total-deductions">…</td>
+                            </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="net-card">
+                    <span>Líquido da rescisão</span>
+                    <strong id="sev-net">R$ 0,00</strong>
+                </div>
+
+                <div class="paycheck">
+                    <div class="paycheck-header"><span>FGTS e seguro-desemprego</span><b id="sev-months-echo">…</b>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="paycheck-table">
+                            <tbody id="sev-extra-body">
+                            <tr>
+                                <td class="empty-state" colspan="2">Aguardando os dados do contrato.</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="chips">
+                    <div class="chip"><small>FGTS: saque liberado</small><b id="sev-fgts-available">…</b></div>
+                    <div class="chip"><small>Multa do FGTS</small><b id="sev-fgts-fine">…</b></div>
+                    <div class="chip"><small>Seguro-desemprego</small><b id="sev-unemployment">…</b></div>
+                    <div class="chip"><small>Total geral estimado</small><b id="sev-grand-total">…</b></div>
+                </div>
+
+                <details class="memo">
+                    <summary>Memória de cálculo</summary>
+                    <div class="memo-body" id="sev-memo"></div>
+                </details>
+
+                <p class="note">As verbas rescisórias devem ser pagas em até <b>10 dias corridos</b> do término do
+                    contrato (CLT, art. 477, § 6º). A <b>multa do FGTS</b> é depositada na conta vinculada e sacada na
+                    CAIXA junto com o saldo liberado — <b>não sai no líquido</b> pago pela empresa. Estimativa
+                    simplificada: convenções coletivas, médias exatas, juros/atualização do FGTS e vínculos anteriores
+                    (para o seguro-desemprego) podem alterar os valores.</p>
+            </aside>
+        </div>
+    </main>
+
+    <!-- ============================ PARÂMETROS ============================ -->
+    <main hidden id="settings-view">
+        <div class="settings-grid">
+            <section class="panel">
+                <h2 class="panel-title">INSS: contribuição progressiva (empregados)</h2>
+                <table class="settings-table">
+                    <thead>
+                    <tr>
+                        <th>Faixa até (R$)</th>
+                        <th>Alíquota (%)</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="inss-brackets-body"></tbody>
+                </table>
+                <button class="btn btn-small" id="add-inss-bracket" type="button">+ faixa</button>
+                <p class="field-hint spaced" id="inss-note"></p>
+            </section>
+
+            <section class="panel">
+                <h2 class="panel-title">IRRF: tabela progressiva mensal</h2>
+                <table class="settings-table">
+                    <thead>
+                    <tr>
+                        <th>Base até (R$)</th>
+                        <th>Alíquota (%)</th>
+                        <th>Parcela a deduzir (R$)</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="irrf-brackets-body"></tbody>
+                </table>
+                <button class="btn btn-small" id="add-irrf-bracket" type="button">+ faixa</button>
+                <p class="field-hint spaced">Deixe “Base até” vazio na última faixa (sem limite).</p>
+            </section>
+
+            <section class="panel">
+                <h2 class="panel-title">Redutor da Lei nº 15.270/2025</h2>
+                <table class="settings-table">
+                    <tbody>
+                    <tr>
+                        <td>Isenção total até (R$/mês)</td>
+                        <td><input id="reduction-exempt-limit" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Redução parcial até (R$/mês)</td>
+                        <td><input id="reduction-upper-limit" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Constante da fórmula (R$)</td>
+                        <td><input id="reduction-constant" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Coeficiente da fórmula</td>
+                        <td><input id="reduction-rate" inputmode="decimal"></td>
+                    </tr>
+                    </tbody>
+                </table>
+                <p class="field-hint spaced">Redução = constante menos (coeficiente × rendimento tributável), limitada
+                    ao imposto apurado. Vigente: 978,62 menos (0,133145 × rendimento).</p>
+            </section>
+
+            <section class="panel">
+                <h2 class="panel-title">Demais parâmetros</h2>
+                <table class="settings-table">
+                    <tbody>
+                    <tr>
+                        <td>Ano de vigência (rótulo)</td>
+                        <td><input id="params-year"></td>
+                    </tr>
+                    <tr>
+                        <td>Salário mínimo (R$)</td>
+                        <td><input id="minimum-wage" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Dedução por dependente, IRRF (R$)</td>
+                        <td><input id="dependent-deduction" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Desconto simplificado, IRRF (R$)</td>
+                        <td><input id="simplified-deduction" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Salário-família: cota por filho (R$)</td>
+                        <td><input id="family-quota" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Salário-família: limite de remuneração (R$)</td>
+                        <td><input id="family-limit" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>FGTS (%)</td>
+                        <td><input id="fgts-rate-input" inputmode="decimal"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section class="panel">
+                <h2 class="panel-title">Rescisão: aviso prévio e multa do FGTS</h2>
+                <table class="settings-table">
+                    <tbody>
+                    <tr>
+                        <td>Aviso prévio: base (dias)</td>
+                        <td><input id="notice-base-days" inputmode="numeric"></td>
+                    </tr>
+                    <tr>
+                        <td>Aviso prévio: acréscimo por ano completo (dias)</td>
+                        <td><input id="notice-per-year-days" inputmode="numeric"></td>
+                    </tr>
+                    <tr>
+                        <td>Aviso prévio: máximo (dias)</td>
+                        <td><input id="notice-max-days" inputmode="numeric"></td>
+                    </tr>
+                    <tr>
+                        <td>Multa do FGTS: dispensa sem justa causa (%)</td>
+                        <td><input id="fgts-fine-percent" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Multa do FGTS: acordo e culpa recíproca (%)</td>
+                        <td><input id="fgts-agreement-fine-percent" inputmode="decimal"></td>
+                    </tr>
+                    </tbody>
+                </table>
+                <p class="field-hint spaced">Aviso: Lei nº 12.506/2011 (30 + 3 por ano, máx. 90). Multas: Lei nº
+                    8.036/1990, art. 18, §§ 1º e 2º.</p>
+            </section>
+
+            <section class="panel">
+                <h2 class="panel-title">Seguro-desemprego (faixas do MTE)</h2>
+                <table class="settings-table">
+                    <tbody>
+                    <tr>
+                        <td>Faixa 1: salário médio até (R$)</td>
+                        <td><input id="su-first-limit" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Faixa 1: fator multiplicador</td>
+                        <td><input id="su-first-factor" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Faixa 2: salário médio até (R$)</td>
+                        <td><input id="su-second-limit" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Faixa 2: parcela fixa (R$)</td>
+                        <td><input id="su-second-base" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Faixa 2: fator sobre o excedente</td>
+                        <td><input id="su-second-factor" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Teto da parcela (R$)</td>
+                        <td><input id="su-ceiling" inputmode="decimal"></td>
+                    </tr>
+                    </tbody>
+                </table>
+                <p class="field-hint spaced">Tabela do MTE vigente desde 11/01/2026 (Lei nº 7.998/1990). O piso da
+                    parcela é o salário mínimo informado acima; o valor final é arredondado para o inteiro superior
+                    (art. 4º, § 4º).</p>
+            </section>
+        </div>
+
+        <div class="settings-actions">
+            <button class="btn btn-primary" id="save-settings" type="button">Salvar alterações neste navegador</button>
+            <button class="btn" id="reset-settings" type="button">Restaurar padrões 2026</button>
+            <button class="btn" id="export-settings" type="button">Gerar JSON (backup)</button>
+            <button class="btn" id="import-settings" type="button">Aplicar JSON colado abaixo</button>
+            <span class="settings-feedback hidden" id="settings-saved-note" role="status">Salvo ✓</span>
+            <span class="settings-feedback is-error hidden" id="settings-error-note" role="alert"></span>
+        </div>
+        <textarea class="settings-json" id="settings-json" placeholder="O JSON de backup aparece aqui. Você também pode colar um JSON e clicar em “Aplicar”."
+                  spellcheck="false"></textarea>
+
+        <section class="panel spaced-top">
+            <h2 class="panel-title">Como manter os dados atualizados (checklist de janeiro)</h2>
+            <ol class="steps">
+                <li><b>Salário mínimo</b>: decreto publicado no fim de dezembro (Planalto/DOU). Atualize o campo
+                    “Salário mínimo”. Em 2026: R$ 1.621,00 (Decreto nº 12.797/2025).
+                </li>
+                <li><b>INSS, teto e salário-família</b>: Portaria Interministerial MPS/MF publicada em janeiro (em 2026,
+                    a Portaria nº 13, de 09/01/2026). Atualize as 4 faixas do INSS e os dois campos do salário-família.
+                </li>
+                <li><b>IRRF</b>: confira a página “Tabelas” da Receita Federal. A tabela progressiva, a dedução por
+                    dependente e o desconto simplificado só mudam quando há lei ou MP nova; o redutor da Lei 15.270/2025
+                    tem valores fixos até que a lei seja alterada.
+                </li>
+                <li><b>Seguro-desemprego</b>: o MTE reajusta as faixas em janeiro (pelo INPC, com vigência em 11/01).
+                    Atualize os campos da seção “Seguro-desemprego” com a notícia oficial do gov.br/trabalho-e-emprego.
+                </li>
+                <li>Clique em <b>Salvar alterações</b> e gere um JSON de backup. Os links diretos estão na aba “Fontes
+                    oficiais”.
+                </li>
+            </ol>
+        </section>
+    </main>
+
+    <!-- ============================ FONTES ============================ -->
+    <main hidden id="sources-view">
+        <section class="panel">
+            <h2 class="panel-title">Fontes oficiais utilizadas (valores vigentes em 2026)</h2>
+            <ul class="sources-list">
+                <li><b>Tabela INSS 2026, teto e salário-família: Portaria Interministerial MPS/MF nº 13, de
+                    09/01/2026</b>
+                    <a href="https://www.gov.br/previdencia/pt-br/assuntos/rpps/documentos/PortariaInterministerialMPSMF13de9dejaneirode2026.pdf"
+                       rel="noopener" target="_blank">gov.br/previdencia: PDF da portaria</a>
+                    <a href="https://www.gov.br/inss/pt-br/assuntos/com-reajuste-de-3-9-teto-do-inss-chega-a-r-8-475-55-em-2026"
+                       rel="noopener" target="_blank">gov.br/inss: notícia oficial do reajuste (teto R$ 8.475,55)</a>
+                    <small>Faixas: 7,5% até R$ 1.621,00; 9% até R$ 2.902,84; 12% até R$ 4.354,27; 14% até R$ 8.475,55.
+                        Salário-família: R$ 67,54 por filho, para remuneração até R$ 1.980,38.</small></li>
+                <li><b>Tabela IRRF mensal 2026, dependente e desconto simplificado: Receita Federal</b>
+                    <a href="https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/tabelas/2026"
+                       rel="noopener" target="_blank">gov.br/receitafederal: tabelas de tributação 2026</a>
+                    <small>Isento até R$ 2.428,80; alíquotas de 7,5%, 15%, 22,5% e 27,5% (parcela a deduzir até R$
+                        908,73). Dependente: R$ 189,59/mês. Desconto simplificado: R$ 607,20.</small></li>
+                <li><b>Isenção até R$ 5.000 e redutor até R$ 7.350: Lei nº 15.270, de 26/11/2025</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2025/lei/l15270.htm" rel="noopener"
+                       target="_blank">planalto.gov.br: texto da lei</a>
+                    <a href="https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/tabelas/exemplos-de-aplicacao-da-lei-15-270-2025"
+                       rel="noopener" target="_blank">Receita Federal: exemplos oficiais de aplicação</a>
+                    <small>Redução = R$ 978,62 menos (0,133145 × rendimentos tributáveis mensais), limitada ao imposto
+                        apurado; zera o IRRF até R$ 5.000.</small></li>
+                <li><b>Salário mínimo 2026 (R$ 1.621,00): Decreto nº 12.797, de 23/12/2025</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2025/decreto/d12797.htm"
+                       rel="noopener" target="_blank">planalto.gov.br: texto do decreto</a></li>
+                <li><b>FGTS 8%: Lei nº 8.036/1990, art. 15</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l8036consol.htm" rel="noopener" target="_blank">planalto.gov.br:
+                        lei consolidada</a></li>
+                <li><b>Horas extras, adicional noturno, insalubridade e periculosidade: CLT (Decreto-Lei nº 5.452/1943),
+                    arts. 59, 73, 192 e 193</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" rel="noopener"
+                       target="_blank">planalto.gov.br: CLT</a>
+                    <small>Reflexo dos adicionais na hora extra: Súmula 264 do TST.</small></li>
+                <li><b>13º salário: Lei nº 4.090/1962, Lei nº 4.749/1965 e Decreto nº 10.854/2021</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l4090.htm" rel="noopener" target="_blank">planalto.gov.br:
+                        Lei 4.090/1962 (gratificação natalina)</a>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l4749.htm" rel="noopener" target="_blank">planalto.gov.br:
+                        Lei 4.749/1965 (pagamento em duas parcelas)</a>
+                    <a href="https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/decreto/D10854.htm"
+                       rel="noopener" target="_blank">planalto.gov.br: Decreto 10.854/2021 (regulamento trabalhista)</a>
+                    <small>1/12 da remuneração por mês trabalhado (fração ≥ 15 dias conta como mês); 1ª parcela entre
+                        1º/02 e 30/11 sem descontos, podendo ser adiantada nas férias se requerida em janeiro; 2ª
+                        parcela até 20/12, com INSS e IRRF sobre o valor integral.</small></li>
+                <li><b>Férias, abono pecuniário e terço constitucional: CLT, arts. 129 a 145; CF, art. 7º, XVII</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" rel="noopener"
+                       target="_blank">planalto.gov.br: CLT (arts. 129 a 145)</a>
+                    <a href="https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm" rel="noopener"
+                       target="_blank">planalto.gov.br: Constituição Federal (art. 7º, XVII)</a>
+                    <small>Escala de dias por faltas injustificadas (art. 130); venda de até 1/3 dos dias (art. 143);
+                        pagamento até 2 dias antes do início (art. 145); remuneração com acréscimo de 1/3.</small></li>
+                <li><b>INSS e IRRF sobre 13º e férias: Lei nº 8.212/1991 (art. 28, §§ 7º e 9º), IN RFB nº 1.500/2014
+                    (arts. 13, 62 e 65-A, com a redação da IN RFB nº 2.299/2025) e RIR/2018 (Decreto nº 9.580/2018, art.
+                    682)</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l8212cons.htm" rel="noopener" target="_blank">planalto.gov.br:
+                        Lei 8.212/1991 (custeio da Previdência)</a>
+                    <a href="http://normas.receita.fazenda.gov.br/sijut2consulta/link.action?visao=anotado&idAto=57670"
+                       rel="noopener" target="_blank">normas.receita.fazenda.gov.br: IN RFB 1.500/2014 consolidada</a>
+                    <a href="https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2025/dezembro/receita-federal-atualiza-normas-relativas-ao-imposto-sobre-a-renda-das-pessoas-fisicas"
+                       rel="noopener" target="_blank">gov.br/receitafederal: notícia oficial da IN RFB 2.299/2025</a>
+                    <a href="https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/decreto/d9580.htm" rel="noopener"
+                       target="_blank">planalto.gov.br: RIR/2018 (art. 682, férias em separado)</a>
+                    <small>INSS do 13º calculado em separado da folha (art. 28, § 7º); IRRF do 13º exclusivo na fonte
+                        com o redutor de 2026 (IN 1.500/2014, arts. 13 e 65-A, § 3º); férias tributadas separadamente
+                        dos demais rendimentos do mês (RIR/2018, art. 682); abono pecuniário e respectivo terço isentos
+                        de INSS (art. 28, § 9º) e de IRRF (IN 1.500/2014, art. 62).</small></li>
+                <li><b>Rescisão do contrato: CLT, arts. 477 a 486 (prazos, justa causa, rescisão indireta, culpa
+                    recíproca, contratos a termo) e art. 484-A (acordo mútuo, Lei nº 13.467/2017)</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" rel="noopener"
+                       target="_blank">planalto.gov.br: CLT</a>
+                    <small>Pagamento das verbas em até 10 dias do término (art. 477, § 6º), sob multa de um salário (§
+                        8º). Acordo: metade do aviso indenizado, multa de 20%, saque de até 80% e sem seguro-desemprego
+                        (art. 484-A). Contratos a termo: indenização de metade dos dias restantes (art. 479) ou possível
+                        indenização ao empregador (art. 480). Culpa recíproca: metade do aviso, do 13º e das férias
+                        proporcionais (art. 484; Súmula 14 do TST). Férias na rescisão: arts. 146 e 147 e Súmulas 171 e
+                        261 do TST.</small></li>
+                <li><b>Aviso prévio proporcional: Lei nº 12.506/2011</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2011/lei/l12506.htm" rel="noopener"
+                       target="_blank">planalto.gov.br: texto da lei</a>
+                    <small>30 dias + 3 por ano completo de serviço, limitado a 90 (Nota Técnica MTE nº 184/2012). O
+                        aviso indenizado projeta o contrato para 13º e férias (CLT, art. 487, § 1º), recebe FGTS (Súmula
+                        305 do TST) e não sofre INSS (STJ, Tema 478; IN RFB nº 2.110/2022, art. 34) nem IRRF (Lei nº
+                        7.713/1988, art. 6º, V).</small></li>
+                <li><b>FGTS na rescisão — multa e saque: Lei nº 8.036/1990, arts. 18 e 20</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l8036consol.htm" rel="noopener" target="_blank">planalto.gov.br:
+                        lei consolidada</a>
+                    <small>Multa de 40% sobre todos os depósitos do contrato na dispensa sem justa causa (art. 18, § 1º)
+                        e de 20% na culpa recíproca e no acordo (art. 18, § 2º; CLT, art. 484-A). Saque: dispensa sem
+                        justa causa (inclusive indireta), fim do contrato a termo, culpa recíproca e falecimento (art.
+                        20); no acordo, movimentação limitada a 80% da conta (CLT, art. 484-A, § 1º).</small></li>
+                <li><b>Seguro-desemprego: Lei nº 7.998/1990 (com a Lei nº 13.134/2015) e tabela do MTE vigente desde
+                    11/01/2026</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l7998.htm" rel="noopener" target="_blank">planalto.gov.br:
+                        Lei 7.998/1990</a>
+                    <a href="https://www.gov.br/trabalho-e-emprego/pt-br/noticias-e-conteudo/2026/janeiro/mte-reajusta-valores-do-beneficio-seguro-desemprego"
+                       rel="noopener" target="_blank">gov.br/trabalho-e-emprego: valores reajustados para 2026</a>
+                    <small>Carência: 12 meses nos últimos 18 (1ª solicitação), 9 nos últimos 12 (2ª) ou 6 meses (demais)
+                        — art. 3º. Parcelas: 3 a 5 conforme os meses trabalhados nos últimos 36 (art. 4º, § 2º; fração ≥
+                        15 dias conta, § 3º). Faixas 2026: até R$ 2.222,17 → média × 0,8; até R$ 3.703,99 → R$ 1.777,74
+                        + 50% do excedente; acima → teto de R$ 2.518,65; piso = salário mínimo; parcela arredondada ao
+                        inteiro superior (§ 4º).</small></li>
+                <li><b>Isenções das verbas rescisórias: Lei nº 7.713/1988, art. 6º, V (aviso indenizado, indenizações,
+                    FGTS e multa) e Lei nº 8.212/1991, art. 28, § 9º (férias indenizadas)</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l7713.htm" rel="noopener" target="_blank">planalto.gov.br:
+                        Lei 7.713/1988</a>
+                    <small>Férias vencidas e proporcionais pagas na rescisão + 1/3 são isentas de IRRF (Súmulas 125 e
+                        386 do STJ; IN RFB nº 1.500/2014, art. 62) e de INSS (art. 28, § 9º, “d”). Saldo de salário e
+                        13º proporcional são tributados normalmente (13º em separado, com IRRF exclusivo na
+                        fonte).</small></li>
+                <li><b>Descanso semanal remunerado (DSR): Lei nº 605/1949</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l0605.htm" rel="noopener" target="_blank">planalto.gov.br:
+                        texto da lei</a></li>
+                <li><b>Vale-transporte (desconto de até 6%): Lei nº 7.418/1985</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l7418.htm" rel="noopener" target="_blank">planalto.gov.br:
+                        texto da lei</a></li>
+            </ul>
+        </section>
+        <section class="panel">
+            <h2 class="panel-title">Metodologia do cálculo</h2>
+            <ol class="steps">
+                <li><b>Valor-hora</b> = (salário base + periculosidade + insalubridade) ÷ jornada mensal.</li>
+                <li><b>Horas extras</b> = valor-hora × (1 + adicional) × horas. <b>DSR</b> = (soma das verbas variáveis
+                    ÷ dias úteis) × (domingos + feriados).
+                </li>
+                <li><b>INSS</b>: alíquotas progressivas por faixa sobre a remuneração (salário + extras + adicionais +
+                    DSR), limitada ao teto.
+                </li>
+                <li><b>IRRF</b>: base = rendimento tributável menos INSS, dependentes, pensão e PGBL, <i>ou</i>
+                    rendimento menos o desconto simplificado (a calculadora usa o que resultar em menos imposto, como
+                    manda a norma). Sobre o imposto apurado aplica-se o redutor da Lei 15.270/2025 conforme o rendimento
+                    tributável do mês.
+                </li>
+                <li><b>Líquido</b> = proventos (incluindo salário-família) menos INSS, IRRF, pensão, benefícios
+                    descontados, faltas e demais descontos.
+                </li>
+                <li><b>13º salário</b> = (salário + médias) ÷ 12 × avos. 1ª parcela = 50%, sem descontos; INSS calculado
+                    em separado sobre o valor integral; IRRF exclusivo na fonte (deduções legais <i>ou</i> desconto
+                    simplificado, com o redutor da Lei 15.270/2025); 2ª parcela = integral menos INSS, IRRF e 1ª
+                    parcela.
+                </li>
+                <li><b>Férias</b> = (salário + médias) ÷ 30 × dias gozados, mais 1/3 constitucional — base do INSS, do
+                    IRRF (cálculo em separado, com redutor) e do FGTS. Abono pecuniário (dias vendidos + 1/3) isento.
+                    Adiantamento do 13º, quando marcado, entra sem descontos e com FGTS.
+                </li>
+                <li><b>Rescisão</b> = saldo de salário (dias ÷ 30) + aviso prévio (30 + 3/ano, indenizado projeta 13º e
+                    férias) + 13º proporcional (avos de fração ≥ 15 dias; INSS e IRRF em separado) + férias vencidas e
+                    proporcionais + 1/3 (isentas) ± particularidades da modalidade (metades no acordo e na culpa
+                    recíproca; indenizações dos arts. 479/480; perdas na justa causa; desconto do aviso não cumprido no
+                    pedido). <b>FGTS</b>: depósitos de 8% sobre saldo, 13º e aviso indenizado; multa de 40%/20% sobre
+                    todos os depósitos do contrato; liberação conforme a modalidade (80% no acordo). <b>Seguro-desemprego</b>:
+                    carência e nº de parcelas da Lei 7.998/1990 e faixas oficiais do MTE, com piso no salário mínimo e
+                    teto.
+                </li>
+            </ol>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        Ferramenta de estimativa construída com dados oficiais (Receita Federal, INSS/MPS, Planalto). Não substitui o
+        cálculo da contabilidade
+        da empresa, que pode aplicar regras de convenção coletiva, médias e arredondamentos próprios. Valores salvos
+        apenas neste navegador.
+    </footer>
 </div>
 
 <script src="script.js"></script>
