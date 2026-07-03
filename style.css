@@ -457,6 +457,42 @@ input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance:none; margin
 }
 
 /* =====================================================================
+   Seletor de data personalizado (dia/mês/ano) — herda a base do seletor
+   de mês (.month-picker/.month-trigger/.month-panel); adiciona a grade
+   de dias, o modo mês/ano (clique no título) e os atalhos Limpar/Hoje.
+   ===================================================================== */
+.month-panel.date-panel{ width:318px; }
+.month-value.placeholder{ color:var(--faint); }
+.date-title{
+  appearance:none; border:none; background:none; cursor:pointer;
+  font:inherit; font-weight:700; font-size:13.5px; color:var(--ink);
+  padding:5px 10px; border-radius:8px; font-variant-numeric:tabular-nums;
+}
+.date-title:hover{ background:var(--surface-2); color:var(--accent); }
+.date-dows{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:6px; }
+.date-dows span{
+  text-align:center; font-size:10px; font-weight:700;
+  color:var(--faint); text-transform:uppercase;
+}
+.date-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.date-cell{
+  padding:6px 0; border:1px solid transparent; border-radius:8px;
+  background:var(--surface-2); color:var(--ink); font:inherit; font-size:12.5px;
+  font-variant-numeric:tabular-nums; cursor:pointer; text-align:center;
+}
+.date-cell:hover{ border-color:var(--line-strong); background:var(--surface-3); }
+.date-cell.other{ background:transparent; color:var(--faint); }
+.date-cell.today:not(.selected){ border-color:var(--accent); color:var(--accent); }
+.date-cell.selected{
+  background:linear-gradient(180deg,var(--accent),var(--accent-strong));
+  color:var(--on-accent); border-color:transparent; font-weight:600; box-shadow:var(--glow);
+}
+.date-foot{
+  display:flex; justify-content:space-between; gap:8px;
+  margin-top:10px; padding-top:10px; border-top:1px solid var(--line);
+}
+
+/* =====================================================================
    Checkbox personalizado (nativo com appearance:none — acessível)
    ===================================================================== */
 .check{

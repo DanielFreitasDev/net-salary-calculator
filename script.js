@@ -1811,6 +1811,209 @@ function enhanceMonthPicker(native) {
   renderLabel();
 }
 
+/* ---------- seletor de data personalizado (substitui input[type=date]) ---------- */
+const WEEKDAY_LETTERS = ["D", "S", "T", "Q", "Q", "S", "S"];
+
+function toIsoDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+/* Mesmo padrão do seletor de mês: o input nativo permanece como fonte de
+   estado; o painel tem grade de dias, modo mês/ano (clique no título),
+   e atalhos "Limpar" e "Hoje". */
+function enhanceDatePicker(native) {
+  if (native._dateEnhanced) return;
+  native._dateEnhanced = true;
+
+  const wrap = document.createElement("div");
+  wrap.className = "month-picker date-picker";
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "month-trigger";
+  trigger.setAttribute("aria-haspopup", "dialog");
+  trigger.setAttribute("aria-expanded", "false");
+  const labelEl = native.id ? document.querySelector(`label[for="${native.id}"]`) : null;
+  if (labelEl) {
+    if (!labelEl.id) labelEl.id = native.id + "-label";
+    trigger.setAttribute("aria-labelledby", labelEl.id);
+  }
+  const icon = document.createElement("span");
+  icon.className = "month-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = CALENDAR_SVG;
+  const valueSpan = document.createElement("span");
+  valueSpan.className = "month-value";
+  trigger.append(icon, valueSpan);
+
+  const panel = document.createElement("div");
+  panel.className = "month-panel date-panel";
+  panel.setAttribute("role", "dialog");
+  panel.setAttribute("aria-label", "Selecionar data");
+
+  const head = document.createElement("div");
+  head.className = "month-head";
+  const prevBtn = document.createElement("button");
+  prevBtn.type = "button"; prevBtn.className = "month-nav";
+  prevBtn.setAttribute("aria-label", "Mês anterior"); prevBtn.innerHTML = CHEVRON_LEFT_SVG;
+  const title = document.createElement("button");
+  title.type = "button"; title.className = "date-title";
+  title.setAttribute("aria-label", "Escolher mês e ano");
+  const nextBtn = document.createElement("button");
+  nextBtn.type = "button"; nextBtn.className = "month-nav";
+  nextBtn.setAttribute("aria-label", "Próximo mês"); nextBtn.innerHTML = CHEVRON_RIGHT_SVG;
+  head.append(prevBtn, title, nextBtn);
+
+  const dows = document.createElement("div");
+  dows.className = "date-dows";
+  dows.setAttribute("aria-hidden", "true");
+  WEEKDAY_LETTERS.forEach(letter => {
+    const span = document.createElement("span");
+    span.textContent = letter;
+    dows.appendChild(span);
+  });
+
+  const dayGrid = document.createElement("div");
+  dayGrid.className = "date-grid";
+  const dayCells = Array.from({ length: 42 }, () => {
+    const cell = document.createElement("button");
+    cell.type = "button"; cell.className = "date-cell";
+    dayGrid.appendChild(cell);
+    return cell;
+  });
+
+  // Modo mês/ano: reaproveita a grade do seletor de mês.
+  const monthGrid = document.createElement("div");
+  monthGrid.className = "month-grid hidden";
+  const monthCells = MONTH_ABBR.map((abbr, i) => {
+    const cell = document.createElement("button");
+    cell.type = "button"; cell.className = "month-cell"; cell.textContent = abbr;
+    cell.setAttribute("aria-label", MONTH_NAMES[i]);
+    monthGrid.appendChild(cell);
+    return cell;
+  });
+
+  const foot = document.createElement("div");
+  foot.className = "date-foot";
+  const clearBtn = document.createElement("button");
+  clearBtn.type = "button"; clearBtn.className = "btn btn-small"; clearBtn.textContent = "Limpar";
+  const todayBtn = document.createElement("button");
+  todayBtn.type = "button"; todayBtn.className = "btn btn-small"; todayBtn.textContent = "Hoje";
+  foot.append(clearBtn, todayBtn);
+
+  panel.append(head, dows, dayGrid, monthGrid, foot);
+
+  native.parentNode.insertBefore(wrap, native);
+  native.classList.add("select-native-hidden");
+  native.setAttribute("tabindex", "-1");
+  native.setAttribute("aria-hidden", "true");
+  wrap.append(native, trigger, panel);
+
+  const today = new Date();
+  let viewYear = today.getFullYear(), viewMonth = today.getMonth();
+  let monthMode = false;
+
+  const selectedDate = () => parseIsoDate(native.value);
+
+  const renderLabel = () => {
+    const selected = selectedDate();
+    valueSpan.textContent = selected ? selected.toLocaleDateString("pt-BR") : "dd/mm/aaaa";
+    valueSpan.classList.toggle("placeholder", !selected);
+  };
+
+  const renderPanel = () => {
+    title.textContent = monthMode ? String(viewYear) : `${MONTH_NAMES[viewMonth]} de ${viewYear}`;
+    prevBtn.setAttribute("aria-label", monthMode ? "Ano anterior" : "Mês anterior");
+    nextBtn.setAttribute("aria-label", monthMode ? "Próximo ano" : "Próximo mês");
+    dows.classList.toggle("hidden", monthMode);
+    dayGrid.classList.toggle("hidden", monthMode);
+    monthGrid.classList.toggle("hidden", !monthMode);
+    const selected = selectedDate();
+    if (monthMode) {
+      monthCells.forEach((cell, i) => {
+        const isSelected = !!selected && selected.getFullYear() === viewYear && selected.getMonth() === i;
+        cell.classList.toggle("selected", isSelected);
+        cell.classList.toggle("today", viewYear === today.getFullYear() && i === today.getMonth());
+        cell.setAttribute("aria-pressed", isSelected ? "true" : "false");
+      });
+      return;
+    }
+    // Grade fixa de 6 semanas iniciando no domingo anterior ao dia 1º.
+    const first = new Date(viewYear, viewMonth, 1);
+    const gridStart = addDays(first, -first.getDay());
+    const selectedIso = selected ? toIsoDate(selected) : "";
+    const todayIso = toIsoDate(today);
+    dayCells.forEach((cell, i) => {
+      const date = addDays(gridStart, i);
+      const iso = toIsoDate(date);
+      cell.textContent = String(date.getDate());
+      cell.dataset.date = iso;
+      cell.classList.toggle("other", date.getMonth() !== viewMonth);
+      cell.classList.toggle("today", iso === todayIso);
+      cell.classList.toggle("selected", iso === selectedIso);
+      cell.setAttribute("aria-label", date.toLocaleDateString("pt-BR"));
+      cell.setAttribute("aria-pressed", iso === selectedIso ? "true" : "false");
+    });
+  };
+
+  const onDocPointer = (event) => { if (!wrap.contains(event.target)) close(); };
+  function open() {
+    if (wrap.classList.contains("open")) return;
+    const anchor = selectedDate() || today;   // re-sincroniza caso o valor tenha mudado por fora
+    viewYear = anchor.getFullYear();
+    viewMonth = anchor.getMonth();
+    monthMode = false;
+    renderPanel();
+    wrap.classList.add("open");
+    trigger.setAttribute("aria-expanded", "true");
+    document.addEventListener("click", onDocPointer, true);
+  }
+  function close() {
+    if (!wrap.classList.contains("open")) return;
+    wrap.classList.remove("open");
+    trigger.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", onDocPointer, true);
+  }
+  const commit = (isoValue) => {
+    native.value = isoValue;
+    native.dispatchEvent(new Event("change", { bubbles: true }));
+    renderLabel();
+    close();
+    trigger.focus();
+  };
+
+  trigger.addEventListener("click", () => (wrap.classList.contains("open") ? close() : open()));
+  trigger.addEventListener("keydown", (event) => {
+    if (["Enter", " ", "ArrowDown"].includes(event.key)) { event.preventDefault(); open(); }
+    else if (event.key === "Escape") close();
+  });
+  title.addEventListener("click", () => { monthMode = !monthMode; renderPanel(); });
+  prevBtn.addEventListener("click", () => {
+    if (monthMode) viewYear--;
+    else if (--viewMonth < 0) { viewMonth = 11; viewYear--; }
+    renderPanel();
+  });
+  nextBtn.addEventListener("click", () => {
+    if (monthMode) viewYear++;
+    else if (++viewMonth > 11) { viewMonth = 0; viewYear++; }
+    renderPanel();
+  });
+  dayCells.forEach(cell => cell.addEventListener("click", () => commit(cell.dataset.date)));
+  monthCells.forEach((cell, i) => cell.addEventListener("click", () => {
+    viewMonth = i;
+    monthMode = false;
+    renderPanel();
+  }));
+  clearBtn.addEventListener("click", () => commit(""));
+  todayBtn.addEventListener("click", () => commit(toIsoDate(today)));
+  panel.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { event.preventDefault(); close(); trigger.focus(); }
+  });
+  native.addEventListener("change", renderLabel); // reflete mudanças programáticas (restauração/limpar)
+
+  renderLabel();
+}
+
 /* ---------- stepper numérico (− valor +) ---------- */
 function enhanceStepper(input) {
   if (input._stepperEnhanced) return;
@@ -1886,6 +2089,7 @@ function setNetSalary(element, value) {
 function enhanceControls() {
   $$("form select").forEach(enhanceSelect);
   $$("form input[type='month']").forEach(enhanceMonthPicker);
+  $$("form input[type='date']").forEach(enhanceDatePicker);
   $$("form .money-input").forEach(enhanceMoneyField);
   $$("form input[type='number']").forEach(enhanceStepper);
 }
@@ -1969,8 +2173,10 @@ function initEvents() {
     $("#sev-notice-employer").value = "indemnified";
     $("#sev-notice-employee").value = "worked";
     $("#sev-request").value = "1";
-    // Ressincroniza os selects personalizados; o change também salva e re-renderiza.
-    ["sev-type", "sev-notice-employer", "sev-notice-employee", "sev-request"]
+    // Ressincroniza selects e seletores de data personalizados; o change
+    // também salva e re-renderiza.
+    ["sev-type", "sev-notice-employer", "sev-notice-employee", "sev-request",
+      "sev-admission", "sev-termination", "sev-contract-end"]
       .forEach(id => $("#" + id).dispatchEvent(new Event("change", { bubbles: true })));
   });
 
