@@ -1734,6 +1734,39 @@ input[type="checkbox"]:focus-visible {
     box-shadow: var(--ring);
 }
 
+.lock-panel {
+    margin-bottom: 18px;
+}
+
+.lock-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 12px;
+}
+
+.lock-row input {
+    min-height: 38px;
+    min-width: 200px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-inner);
+    color: var(--ink);
+    font-size: 13px;
+    padding: 0 10px;
+}
+
+.lock-row input:focus-visible {
+    outline: none;
+    border-color: var(--focus);
+    box-shadow: var(--ring);
+}
+
+.settings-grid.is-locked, .settings-actions.is-locked, .settings-json.is-locked {
+    opacity: .55;
+}
+
 .settings-actions {
     display: flex;
     gap: 10px;

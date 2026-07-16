@@ -1446,6 +1446,89 @@ function updateBadges() {
     $("#custom-badge").classList.toggle("hidden", !hasCustomParams());
 }
 
+/* Trava de edição dos parâmetros.
+   A senha mestre não fica em texto puro no código: guardamos só o SHA-256 de (SALT + senha).
+   É uma barreira contra edição acidental ou por terceiros no navegador — não é segurança
+   criptográfica: o app é estático e roda inteiro no cliente. */
+const MASTER_PASSWORD_SALT = "net-salary-calc:v1:";
+const MASTER_PASSWORD_HASH = "cbda29c6bcecdaae8585e8ba95d3ed28f0c7a1857823a372fcbb72b6783c5932";
+
+let settingsUnlocked = false;
+
+// SHA-256 síncrono (FIPS 180-4); evita depender de crypto.subtle, que exige contexto seguro.
+function sha256Hex(message) {
+    const K = [
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+    ];
+    const H = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    const bytes = Array.from(new TextEncoder().encode(message));
+    const bitLength = bytes.length * 8;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    for (let i = 7; i >= 0; i--) bytes.push(Math.floor(bitLength / Math.pow(2, i * 8)) & 0xff);
+
+    const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+    const w = new Uint32Array(64);
+    for (let offset = 0; offset < bytes.length; offset += 64) {
+        for (let i = 0; i < 16; i++) {
+            const p = offset + i * 4;
+            w[i] = (bytes[p] << 24) | (bytes[p + 1] << 16) | (bytes[p + 2] << 8) | bytes[p + 3];
+        }
+        for (let i = 16; i < 64; i++) {
+            const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+            const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+            w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+        }
+        let [a, b, c, d, e, f, g, h] = H;
+        for (let i = 0; i < 64; i++) {
+            const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+            const ch = (e & f) ^ (~e & g);
+            const t1 = (h + s1 + ch + K[i] + w[i]) >>> 0;
+            const s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+            const maj = (a & b) ^ (a & c) ^ (b & c);
+            const t2 = (s0 + maj) >>> 0;
+            h = g;
+            g = f;
+            f = e;
+            e = (d + t1) >>> 0;
+            d = c;
+            c = b;
+            b = a;
+            a = (t1 + t2) >>> 0;
+        }
+        [a, b, c, d, e, f, g, h].forEach((value, index) => {
+            H[index] = (H[index] + value) >>> 0;
+        });
+    }
+    return H.map(value => value.toString(16).padStart(8, "0")).join("");
+}
+
+function isMasterPassword(value) {
+    return sha256Hex(MASTER_PASSWORD_SALT + value) === MASTER_PASSWORD_HASH;
+}
+
+// Desabilita todos os controles da aba, exceto os da própria trava.
+function applySettingsLock() {
+    const lockPanel = $("#settings-lock");
+    $$("#settings-view input, #settings-view button, #settings-view textarea").forEach(control => {
+        if (lockPanel.contains(control)) return;
+        control.disabled = !settingsUnlocked;
+    });
+    $("#settings-grid-wrap").classList.toggle("is-locked", !settingsUnlocked);
+    $(".settings-actions").classList.toggle("is-locked", !settingsUnlocked);
+    $("#settings-json").classList.toggle("is-locked", !settingsUnlocked);
+    $("#unlock-settings").classList.toggle("hidden", settingsUnlocked);
+    $("#master-password").classList.toggle("hidden", settingsUnlocked);
+    $("#lock-settings").classList.toggle("hidden", !settingsUnlocked);
+}
+
 function renderSettings() {
     const inssBody = $("#inss-brackets-body");
     inssBody.innerHTML = "";
@@ -1495,6 +1578,8 @@ function renderSettings() {
     const maxInss = computeInss(activeParams.inss.ceiling, activeParams).total;
     $("#inss-note").textContent =
         `Teto (última faixa): R$ ${formatNumber(activeParams.inss.ceiling)}; contribuição máxima de R$ ${formatNumber(maxInss)}/mês.`;
+
+    applySettingsLock();
 }
 
 function showSettingsError(message) {
@@ -2447,7 +2532,36 @@ function initEvents() {
         $(".net-bar").classList.toggle("hidden", button.dataset.view !== "calculator-view");
     }));
 
-    // Aba de parâmetros.
+    // Aba de parâmetros: trava por senha mestre.
+    const tryUnlock = () => {
+        const field = $("#master-password");
+        if (!isMasterPassword(field.value)) {
+            const error = $("#lock-error");
+            error.classList.remove("hidden");
+            setTimeout(() => error.classList.add("hidden"), 4000);
+            field.select();
+            return;
+        }
+        settingsUnlocked = true;
+        field.value = "";
+        applySettingsLock();
+        const ok = $("#lock-ok");
+        ok.classList.remove("hidden");
+        setTimeout(() => ok.classList.add("hidden"), 2500);
+    };
+
+    $("#unlock-settings").addEventListener("click", tryUnlock);
+    $("#master-password").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            tryUnlock();
+        }
+    });
+    $("#lock-settings").addEventListener("click", () => {
+        settingsUnlocked = false;
+        renderSettings();
+    });
+
     $("#add-inss-bracket").addEventListener("click", () => {
         activeParams.inss.brackets.push({upTo: activeParams.inss.ceiling, rate: 14});
         renderSettings();
@@ -2471,6 +2585,7 @@ function initEvents() {
     });
 
     $("#save-settings").addEventListener("click", () => {
+        if (!settingsUnlocked) return;
         if (!readSettings()) return;
         try {
             localStorage.setItem(PARAMS_STORAGE_KEY, JSON.stringify(activeParams));
@@ -2485,6 +2600,7 @@ function initEvents() {
     });
 
     $("#reset-settings").addEventListener("click", () => {
+        if (!settingsUnlocked) return;
         if (!confirm("Restaurar todos os parâmetros para os padrões de 2026?")) return;
         try {
             localStorage.removeItem(PARAMS_STORAGE_KEY);
@@ -2502,6 +2618,7 @@ function initEvents() {
     });
 
     $("#import-settings").addEventListener("click", () => {
+        if (!settingsUnlocked) return;
         try {
             const imported = JSON.parse($("#settings-json").value);
             if (!imported.inss || !imported.irrf) throw new Error("estrutura inválida");

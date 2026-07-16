@@ -806,7 +806,21 @@
 
     <!-- ============================ PARÂMETROS ============================ -->
     <main hidden id="settings-view">
-        <div class="settings-grid">
+        <section class="panel lock-panel" id="settings-lock">
+            <h2 class="panel-title">Edição protegida</h2>
+            <p class="field-hint">As tabelas abaixo definem como o cálculo é feito. Informe a senha mestre para liberar a
+                edição e a gravação.</p>
+            <div class="lock-row">
+                <input aria-label="Senha mestre" autocomplete="off" id="master-password" placeholder="Senha mestre"
+                       type="password">
+                <button class="btn btn-primary" id="unlock-settings" type="button">Desbloquear edição</button>
+                <button class="btn hidden" id="lock-settings" type="button">Bloquear novamente</button>
+                <span class="settings-feedback hidden" id="lock-ok" role="status">Edição liberada ✓</span>
+                <span class="settings-feedback is-error hidden" id="lock-error" role="alert">Senha incorreta.</span>
+            </div>
+        </section>
+
+        <div class="settings-grid" id="settings-grid-wrap">
             <section class="panel">
                 <h2 class="panel-title">INSS: contribuição progressiva (empregados)</h2>
                 <table class="settings-table">
