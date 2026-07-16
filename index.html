@@ -42,6 +42,7 @@
         <button aria-selected="false" data-view="thirteenth-view" role="tab">13º salário</button>
         <button aria-selected="false" data-view="vacation-view" role="tab">Férias</button>
         <button aria-selected="false" data-view="severance-view" role="tab">Rescisão</button>
+        <button aria-selected="false" data-view="pj-view" role="tab">PJ vs CLT</button>
         <button aria-selected="false" data-view="settings-view" role="tab">Tabelas e parâmetros</button>
         <button aria-selected="false" data-view="sources-view" role="tab">Fontes oficiais</button>
     </nav>
@@ -804,6 +805,186 @@
         </div>
     </main>
 
+    <!-- ============================ PJ vs CLT ============================ -->
+    <main hidden id="pj-view">
+        <div class="layout">
+            <form autocomplete="off" id="pj-form">
+
+                <section class="panel">
+                    <h2 class="panel-title">O que você quer descobrir</h2>
+                    <div class="row">
+                        <div class="field">
+                            <label for="pj-direction">Direção da simulação</label>
+                            <select id="pj-direction">
+                                <option selected value="clt-to-pj">Quanto faturar como PJ para igualar um salário CLT
+                                </option>
+                                <option value="pj-to-clt">Qual salário CLT equivale a um faturamento PJ</option>
+                            </select>
+                        </div>
+                        <div class="field" id="pj-clt-salary-field">
+                            <label for="pj-clt-salary">Salário CLT bruto mensal</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Salário CLT bruto mensal em reais" class="money-input num"
+                                       id="pj-clt-salary" inputmode="decimal" placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="field hidden" id="pj-invoice-field">
+                            <label for="pj-invoice">Faturamento PJ mensal (nota bruta)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Faturamento mensal bruto da PJ em reais" class="money-input num"
+                                       id="pj-invoice" inputmode="decimal" placeholder="0,00">
+                            </div>
+                        </div>
+                    </div>
+                    <p class="field-hint spaced">A comparação é feita pelo <b>líquido anual</b> dos dois lados: 11
+                        salários líquidos + o mês de férias com o terço + 13º, de um lado; pró-labore líquido + lucro
+                        distribuído, do outro. Simula uma PJ de <b>serviços no Simples Nacional</b> com um sócio.</p>
+                </section>
+
+                <section class="panel">
+                    <h2 class="panel-title">Lado CLT: o que entra na conta</h2>
+                    <div class="row">
+                        <div class="field short">
+                            <label for="pj-dependents">Dependentes (IRRF)</label>
+                            <input id="pj-dependents" min="0" step="1" type="number" value="0">
+                            <small class="field-hint">valem nos dois lados</small>
+                        </div>
+                        <div class="field">
+                            <label for="pj-benefits">Benefícios mensais (VR/VA, saúde, creche…)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Valor mensal dos benefícios CLT em reais" class="money-input num"
+                                       id="pj-benefits" inputmode="decimal" placeholder="0,00">
+                            </div>
+                            <small class="field-hint">o que a PJ teria de pagar do próprio bolso</small>
+                        </div>
+                    </div>
+                    <label class="check"><input checked id="pj-count-fgts" type="checkbox"> Contar o FGTS (8%) como
+                        dinheiro do trabalhador</label>
+                    <label class="check"><input id="pj-count-fgts-fine" type="checkbox"> Somar a multa de 40% do FGTS
+                        (cenário de dispensa sem justa causa)</label>
+                    <p class="field-hint spaced">O FGTS é do trabalhador, mas só é liberado nas hipóteses do art. 20 da
+                        Lei nº 8.036/1990. A multa de 40% só existe se houver dispensa sem justa causa — inclua-a apenas
+                        se quiser precificar esse cenário.</p>
+                </section>
+
+                <section class="panel">
+                    <h2 class="panel-title">Lado PJ: empresa e pró-labore</h2>
+                    <div class="row">
+                        <div class="field">
+                            <label for="pj-annex">Anexo do Simples Nacional</label>
+                            <select id="pj-annex">
+                                <option selected value="auto">Automático (pelo Fator R)</option>
+                                <option value="III">Anexo III (serviços em geral)</option>
+                                <option value="V">Anexo V (maior valor agregado)</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="pj-prolabore-mode">Pró-labore</label>
+                            <select id="pj-prolabore-mode">
+                                <option selected value="factor-r">28% do faturamento (garante o Anexo III)</option>
+                                <option value="minimum">Um salário mínimo</option>
+                                <option value="percent">% do faturamento</option>
+                                <option value="fixed">Valor fixo</option>
+                            </select>
+                        </div>
+                        <div class="field hidden" id="pj-prolabore-value-field">
+                            <label for="pj-prolabore-value">Valor do pró-labore</label>
+                            <div class="money-field" data-mode-select="pj-prolabore-mode">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Valor do pró-labore" class="money-input num" id="pj-prolabore-value"
+                                       inputmode="decimal" placeholder="0,00">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="field">
+                            <label for="pj-accounting">Contador (mensal)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Honorários mensais do contador em reais" class="money-input num"
+                                       id="pj-accounting" inputmode="decimal" placeholder="0,00">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="pj-expenses">Outras despesas da empresa (mensal)</label>
+                            <div class="money-field">
+                                <span aria-hidden="true" class="money-affix">R$</span>
+                                <input aria-label="Outras despesas mensais da empresa em reais" class="money-input num"
+                                       id="pj-expenses" inputmode="decimal" placeholder="0,00">
+                            </div>
+                            <small class="field-hint">certificado digital, ISS fixo, conta PJ…</small>
+                        </div>
+                        <div class="field short">
+                            <label for="pj-billed-months">Meses faturados no ano</label>
+                            <input id="pj-billed-months" max="12" min="1" step="1" type="number" value="12">
+                            <small class="field-hint">PJ não tem férias pagas</small>
+                        </div>
+                    </div>
+                    <p class="field-hint spaced">O <b>Fator R</b> (folha de 12 meses ÷ receita de 12 meses) define o
+                        anexo: a partir de <b>28%</b> a empresa cai no Anexo III, que começa em 6% em vez de 15,5%. Por
+                        isso o pró-labore alto costuma <b>reduzir</b> o imposto total.</p>
+                </section>
+
+                <div class="form-actions">
+                    <button class="btn btn-danger" id="pj-clear" type="button">Limpar campos</button>
+                </div>
+            </form>
+
+            <aside class="results">
+                <div class="net-card">
+                    <span id="pj-answer-label">Faturamento PJ equivalente</span>
+                    <strong id="pj-answer">R$ 0,00</strong>
+                </div>
+
+                <div class="paycheck">
+                    <div class="paycheck-header"><span>Comparativo anual</span><b id="pj-direction-echo">…</b></div>
+                    <div class="table-scroll">
+                        <table class="paycheck-table">
+                            <thead>
+                            <tr>
+                                <th>Descrição</th>
+                                <th class="col-num">CLT</th>
+                                <th class="col-num">PJ</th>
+                            </tr>
+                            </thead>
+                            <tbody id="pj-body">
+                            <tr>
+                                <td class="empty-state" colspan="3">Informe o salário CLT para descobrir quanto faturar
+                                    como PJ.
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="chips">
+                    <div class="chip"><small>Anexo aplicado</small><b id="pj-annex-chip">…</b></div>
+                    <div class="chip"><small>Alíquota efetiva do DAS</small><b id="pj-rate-chip">…</b></div>
+                    <div class="chip"><small>Fator R</small><b id="pj-factor-chip">…</b></div>
+                    <div class="chip"><small>Carga total sobre o faturamento</small><b id="pj-burden-chip">…</b></div>
+                </div>
+
+                <div class="pj-warning hidden" id="pj-warning" role="status"></div>
+
+                <details class="memo">
+                    <summary>Memória de cálculo</summary>
+                    <div class="memo-body" id="pj-memo"></div>
+                </details>
+
+                <p class="note">Estimativa para <b>PJ de serviços no Simples Nacional com um sócio</b>, em regime
+                    permanente (a receita se repete ano a ano). Não cobre Lucro Presumido/Real, ISS fixo de sociedade
+                    uniprofissional, substituição tributária nem o primeiro ano de empresa, quando o RBT12 é
+                    proporcionalizado e a alíquota tende a ser menor. Ser PJ não é escolha livre: presentes
+                    pessoalidade, subordinação, habitualidade e onerosidade, há <b>vínculo de emprego</b> (CLT, arts. 2º
+                    e 3º). Confirme o CNAE, o anexo e o pró-labore com um contador.</p>
+            </aside>
+        </div>
+    </main>
+
     <!-- ============================ PARÂMETROS ============================ -->
     <main hidden id="settings-view">
         <section class="panel lock-panel" id="settings-lock">
@@ -914,6 +1095,65 @@
                     </tr>
                     </tbody>
                 </table>
+            </section>
+
+            <section class="panel">
+                <h2 class="panel-title">Simples Nacional: Anexo III (serviços em geral)</h2>
+                <table class="settings-table">
+                    <thead>
+                    <tr>
+                        <th>RBT12 até (R$)</th>
+                        <th>Alíquota (%)</th>
+                        <th>Parcela a deduzir (R$)</th>
+                    </tr>
+                    </thead>
+                    <tbody id="simples-iii-body"></tbody>
+                </table>
+                <p class="field-hint spaced">LC nº 123/2006, Anexo III. Aplicado quando o Fator R fica igual ou acima do
+                    limite. Alíquota efetiva = (RBT12 × alíquota − parcela) ÷ RBT12.</p>
+            </section>
+
+            <section class="panel">
+                <h2 class="panel-title">Simples Nacional: Anexo V (maior valor agregado)</h2>
+                <table class="settings-table">
+                    <thead>
+                    <tr>
+                        <th>RBT12 até (R$)</th>
+                        <th>Alíquota (%)</th>
+                        <th>Parcela a deduzir (R$)</th>
+                    </tr>
+                    </thead>
+                    <tbody id="simples-v-body"></tbody>
+                </table>
+                <p class="field-hint spaced">LC nº 123/2006, Anexo V. Aplicado quando o Fator R fica abaixo do
+                    limite.</p>
+            </section>
+
+            <section class="panel">
+                <h2 class="panel-title">PJ: pró-labore, Fator R e lucros</h2>
+                <table class="settings-table">
+                    <tbody>
+                    <tr>
+                        <td>INSS do pró-labore (%)</td>
+                        <td><input id="prolabore-inss-rate" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Fator R: limite para o Anexo III (%)</td>
+                        <td><input id="factor-r-threshold" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>IRRF sobre lucros distribuídos (%)</td>
+                        <td><input id="dividend-rate" inputmode="decimal"></td>
+                    </tr>
+                    <tr>
+                        <td>Lucros isentos até (R$/mês por sócio)</td>
+                        <td><input id="dividend-exemption" inputmode="decimal"></td>
+                    </tr>
+                    </tbody>
+                </table>
+                <p class="field-hint spaced">INSS do contribuinte individual: Lei nº 8.212/1991, art. 21 (11%, base
+                    entre o mínimo e o teto). Fator R: LC nº 123/2006, art. 18, §§ 5º-J e 5º-M. IRRF sobre lucros: Lei
+                    nº 15.270/2025, vigente desde 1º/01/2026.</p>
             </section>
 
             <section class="panel">
@@ -1084,6 +1324,38 @@
                         com o redutor de 2026 (IN 1.500/2014, arts. 13 e 65-A, § 3º); férias tributadas separadamente
                         dos demais rendimentos do mês (RIR/2018, art. 682); abono pecuniário e respectivo terço isentos
                         de INSS (art. 28, § 9º) e de IRRF (IN 1.500/2014, art. 62).</small></li>
+                <li><b>Simples Nacional, anexos III e V e Fator R: Lei Complementar nº 123/2006, art. 18</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm" rel="noopener" target="_blank">planalto.gov.br:
+                        LC 123/2006 (art. 18 e anexos III e V)</a>
+                    <a href="https://www8.receita.fazenda.gov.br/SimplesNacional/" rel="noopener" target="_blank">Portal
+                        do Simples Nacional (Receita Federal)</a>
+                    <small>Alíquota efetiva = (RBT12 × alíquota nominal − parcela a deduzir) ÷ RBT12. Anexo III: 6% a
+                        33% (parcelas de R$ 9.360 a R$ 648.000). Anexo V: 15,5% a 30,5% (parcelas de R$ 4.500 a R$
+                        540.000). Fator R = folha de 12 meses (pró-labore incluso) ÷ RBT12; a partir de 28% o serviço
+                        migra do Anexo V para o III (§§ 5º-J e 5º-M). Limite do regime: R$ 4,8 milhões/ano.</small></li>
+                <li><b>INSS do pró-labore (contribuinte individual): Lei nº 8.212/1991, arts. 12, 21 e 28</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/leis/l8212cons.htm" rel="noopener" target="_blank">planalto.gov.br:
+                        Lei 8.212/1991</a>
+                    <small>11% sobre o pró-labore, com base entre o salário mínimo (R$ 1.621,00) e o teto (R$ 8.475,55)
+                        — contribuição máxima de R$ 932,31/mês. A CPP patronal de 20% já está incluída no DAS dos anexos
+                        III e V, não sendo recolhida à parte.</small></li>
+                <li><b>IRRF de 10% sobre lucros e dividendos acima de R$ 50 mil/mês: Lei nº 15.270/2025</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2025/lei/l15270.htm" rel="noopener"
+                       target="_blank">planalto.gov.br: texto da lei</a>
+                    <a href="https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2025/dezembro/receita-federal-lanca-perguntas-e-respostas-sobre-tributacao-de-altas-rendas-consideracoes-sobre-lucros-e-dividendos"
+                       rel="noopener" target="_blank">Receita Federal: perguntas e respostas sobre lucros e
+                        dividendos</a>
+                    <small>Desde 1º/01/2026, a distribuição da mesma pessoa jurídica para a mesma pessoa física
+                        residente que supere R$ 50.000 no mês sofre retenção de 10% sobre o <b>total</b> pago no mês, e
+                        não só sobre o excedente. Aplica-se também ao Simples Nacional. Regra de transição: lucros
+                        apurados até 31/12/2025, com distribuição aprovada até essa data, seguem isentos se pagos até
+                        2028.</small></li>
+                <li><b>Vínculo de emprego e “pejotização”: CLT, arts. 2º, 3º e 9º</b>
+                    <a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" rel="noopener"
+                       target="_blank">planalto.gov.br: CLT</a>
+                    <small>Presentes pessoalidade, subordinação, habitualidade e onerosidade, há relação de emprego
+                        ainda que o contrato seja firmado entre empresas; atos que visem fraudar a aplicação da CLT são
+                        nulos (art. 9º).</small></li>
                 <li><b>Rescisão do contrato: CLT, arts. 477 a 486 (prazos, justa causa, rescisão indireta, culpa
                     recíproca, contratos a termo) e art. 484-A (acordo mútuo, Lei nº 13.467/2017)</b>
                     <a href="https://www.planalto.gov.br/ccivil_03/decreto-lei/del5452.htm" rel="noopener"

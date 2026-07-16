@@ -1110,6 +1110,16 @@ input[type="checkbox"] {
     margin-top: 1px;
 }
 
+/* Opção que depende de outra (ex.: multa de 40% sem o FGTS marcado). */
+.check:has(input[type="checkbox"]:disabled) {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+}
+
 input[type="checkbox"]:hover {
     border-color: var(--accent);
 }
@@ -1679,6 +1689,37 @@ input[type="checkbox"]:focus-visible {
 
 .note b {
     color: var(--ink);
+}
+
+/* =====================================================================
+   Aba PJ vs CLT
+   ===================================================================== */
+.pj-warning {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+    background: color-mix(in srgb, var(--warning) 9%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--line));
+    border-left: 3px solid var(--warning);
+    border-radius: var(--radius-inner);
+    padding: 12px 14px;
+    display: grid;
+    gap: 8px;
+}
+
+.pj-warning b {
+    color: var(--ink);
+}
+
+/* Célula sem contrapartida no outro regime (ex.: 13º na coluna PJ). */
+.paycheck-table .muted {
+    color: var(--muted);
+}
+
+.paycheck-table .pj-total td {
+    font-weight: 600;
+    color: var(--ink);
+    border-top: 1px solid var(--line);
 }
 
 /* =====================================================================

@@ -49,6 +49,32 @@ const DEFAULT_PARAMS = {
         secondBase: 1777.74,
         secondFactor: 0.5,
         ceiling: 2518.65               // acima: parcela fixa no teto (piso do benefício = salário mínimo)
+    },
+    pj: {                            // Simulação PJ × CLT
+        proLaboreInssRate: 11,         // contribuinte individual (Lei nº 8.212/1991, art. 21)
+        factorRThreshold: 28,          // Fator R (LC nº 123/2006, art. 18, §§ 5º-J e 5º-M)
+        dividends: {                   // IRRF sobre lucros (Lei nº 15.270/2025, art. 6º-A da Lei nº 9.250/1995)
+            rate: 10,
+            monthlyExemption: 50000.00   // por fonte pagadora (CNPJ) e por beneficiário (CPF), apurado no mês
+        },
+        simples: {                     // Simples Nacional, tabelas anuais por RBT12 (LC nº 123/2006)
+            annexIII: [                  // serviços em geral; exige Fator R ≥ 28%
+                {upTo: 180000.00, rate: 6.0, deduction: 0},
+                {upTo: 360000.00, rate: 11.2, deduction: 9360.00},
+                {upTo: 720000.00, rate: 13.5, deduction: 17640.00},
+                {upTo: 1800000.00, rate: 16.0, deduction: 35640.00},
+                {upTo: 3600000.00, rate: 21.0, deduction: 125640.00},
+                {upTo: 4800000.00, rate: 33.0, deduction: 648000.00}
+            ],
+            annexV: [                    // serviços de maior valor agregado; Fator R < 28%
+                {upTo: 180000.00, rate: 15.5, deduction: 0},
+                {upTo: 360000.00, rate: 18.0, deduction: 4500.00},
+                {upTo: 720000.00, rate: 19.5, deduction: 9900.00},
+                {upTo: 1800000.00, rate: 20.5, deduction: 17100.00},
+                {upTo: 3600000.00, rate: 23.0, deduction: 62100.00},
+                {upTo: 4800000.00, rate: 30.5, deduction: 540000.00}
+            ]
+        }
     }
 };
 
@@ -755,6 +781,196 @@ function computeSeverance(input, params) {
     };
 }
 
+/* ===================== PJ × CLT =====================
+
+   Compara a remuneração de um contrato CLT com o que uma PJ prestadora de
+   serviços no Simples Nacional precisa faturar para chegar ao mesmo líquido.
+
+   Simples Nacional (LC nº 123/2006, art. 18): a alíquota efetiva sai de
+   (RBT12 × alíquota nominal − parcela a deduzir) ÷ RBT12, onde RBT12 é a
+   receita bruta dos 12 meses anteriores. O Fator R — folha de 12 meses
+   (pró-labore incluso) ÷ RBT12 — define o anexo: ≥ 28% cai no Anexo III,
+   abaixo disso no Anexo V (§§ 5º-J e 5º-M).
+
+   Pró-labore: 11% de INSS como contribuinte individual, base entre o salário
+   mínimo e o teto (Lei nº 8.212/1991, art. 21), mais IRRF pela tabela mensal
+   (com o redutor da Lei nº 15.270/2025). A CPP patronal de 20% já está dentro
+   do DAS nos anexos III e V, então não entra de novo.
+
+   Lucros: desde 1º/01/2026 há IRRF de 10% quando a distribuição da mesma PJ
+   para a mesma pessoa física passa de R$ 50.000 no mês — e a alíquota incide
+   sobre o total distribuído, não só sobre o excedente (Lei nº 15.270/2025). */
+
+/* Alíquota efetiva do Simples a partir do RBT12: reusa taxFromTable, que já
+   implementa "base × alíquota − parcela a deduzir". */
+function simplesEffectiveRate(rbt12, brackets) {
+    const last = brackets[brackets.length - 1];
+    if (rbt12 <= 0) return {rate: brackets[0].rate / 100, bracket: 1, exceedsLimit: false, limit: last.upTo};
+    const index = brackets.findIndex(bracket => bracket.upTo == null || rbt12 <= bracket.upTo);
+    return {
+        rate: taxFromTable(rbt12, brackets) / rbt12,
+        bracket: index === -1 ? brackets.length : index + 1,
+        exceedsLimit: last.upTo != null && rbt12 > last.upTo,
+        limit: last.upTo
+    };
+}
+
+function proLaboreAmount(input, monthlyInvoice, params) {
+    if (input.proLaboreMode === "fixed") return Math.max(0, input.proLaboreValue || 0);
+    if (input.proLaboreMode === "percent") return Math.max(0, monthlyInvoice * (input.proLaboreValue || 0) / 100);
+    // "factor-r": pró-labore no mínimo necessário para garantir o Anexo III.
+    if (input.proLaboreMode === "factor-r") return monthlyInvoice * params.pj.factorRThreshold / 100;
+    return params.minimumWage;
+}
+
+/* Faturamento PJ -> líquido anual no bolso do sócio (função pura, sem DOM). */
+function computePj(input, params) {
+    const rules = params.pj;
+    const billedMonths = Math.min(12, Math.max(1, Math.round(input.billedMonths || 12)));
+    const monthlyInvoice = Math.max(0, input.monthlyInvoice || 0);
+    const proLaboreRaw = proLaboreAmount(input, monthlyInvoice, params);
+    const proLabore = round2(proLaboreRaw);
+
+    // RBT12 do regime permanente: os meses faturados repetem-se ano a ano.
+    const annualInvoiceRaw = monthlyInvoice * billedMonths;
+    const annualInvoice = round2(annualInvoiceRaw);
+    const annualProLabore = round2(proLabore * 12);
+    // O Fator R compara os dois lados sem arredondar: no modo "28% do faturamento" os
+    // centavos perdidos no round2 derrubariam o fator para 27,9996% e jogariam a empresa
+    // no Anexo V a cada centavo, serrilhando a curva. A folga de 1e-9 absorve o ruído de
+    // ponto flutuante do próprio 0,28.
+    const factorR = annualInvoiceRaw > 0 ? proLaboreRaw * 12 / annualInvoiceRaw : 0;
+    const factorRAnnex = factorR >= rules.factorRThreshold / 100 - 1e-9 ? "III" : "V";
+    const annex = input.annex === "auto" ? factorRAnnex : input.annex;
+    const brackets = annex === "III" ? rules.simples.annexIII : rules.simples.annexV;
+    const simples = simplesEffectiveRate(annualInvoice, brackets);
+
+    const das = round2(monthlyInvoice * simples.rate);
+    const annualDas = round2(annualInvoice * simples.rate);
+
+    // INSS do sócio: 11% sobre o pró-labore, piso no mínimo e topo no teto.
+    const inssBase = proLabore > 0
+        ? Math.min(Math.max(proLabore, params.minimumWage), params.inss.ceiling)
+        : 0;
+    const inssProLabore = round2(inssBase * rules.proLaboreInssRate / 100);
+    const irrf = computeIrrf(proLabore,
+        inssProLabore + (input.irDependents || 0) * params.irrf.dependentDeduction, params);
+
+    const expenses = round2(Math.max(0, input.accountingFee || 0) + Math.max(0, input.otherExpenses || 0));
+    const annualExpenses = round2(expenses * 12);
+    const annualProfit = round2(annualInvoice - annualDas - annualProLabore - annualExpenses);
+    const monthlyProfit = round2(annualProfit / 12);
+
+    const taxedDividends = monthlyProfit > rules.dividends.monthlyExemption;
+    const dividendTax = taxedDividends ? round2(monthlyProfit * rules.dividends.rate / 100) : 0;
+    const annualDividendTax = round2(dividendTax * 12);
+
+    const annualNet = round2(annualProLabore - round2(inssProLabore * 12) - round2(irrf.total * 12)
+        + annualProfit - annualDividendTax);
+
+    return {
+        billedMonths, monthlyInvoice, annualInvoice,
+        proLabore, annualProLabore, factorR, factorRAnnex, annex, simples,
+        das, annualDas, inssBase, inssProLabore, irrf,
+        expenses, annualExpenses, annualProfit, monthlyProfit,
+        taxedDividends, dividendTax, annualDividendTax,
+        netProLabore: round2(proLabore - inssProLabore - irrf.total),
+        annualNet, monthlyNet: round2(annualNet / 12),
+        totalTax: round2(annualDas + inssProLabore * 12 + irrf.total * 12 + annualDividendTax),
+        effectiveBurden: annualInvoice > 0
+            ? round2((annualInvoice - annualExpenses - annualNet) / annualInvoice * 100) : 0
+    };
+}
+
+/* Pacote CLT anual: 11 salários + o mês de férias (com 1/3) + 13º, mais FGTS e
+   benefícios quando marcados. É o total que a PJ precisa igualar. */
+function computeCltPackage(input, params) {
+    const salary = Math.max(0, input.salary || 0);
+    const irDependents = input.irDependents || 0;
+    const noAlimony = {mode: "fixed", value: 0};
+
+    const inss = computeInss(salary, params);
+    const irrf = computeIrrf(salary, inss.total + irDependents * params.irrf.dependentDeduction, params);
+    const monthlyNet = round2(salary - inss.total - irrf.total);
+
+    const thirteenth = computeThirteenth(
+        {baseSalary: salary, averages: 0, months: 12, irDependents, alimony: noAlimony}, params);
+    const vacation = computeVacation(
+        {baseSalary: salary, averages: 0, days: 30, soldDays: 0, advanceThirteenth: false, irDependents, alimony: noAlimony},
+        params);
+
+    const fgtsMonthly = round2(salary * params.fgtsRate / 100);
+    const fgtsYear = round2(fgtsMonthly * 12 + thirteenth.fgtsAmount);
+    const fgtsFine = input.countFgts && input.countFgtsFine
+        ? round2(fgtsYear * params.severance.finePercent / 100) : 0;
+    const fgtsTotal = input.countFgts ? round2(fgtsYear + fgtsFine) : 0;
+    const benefits = round2(Math.max(0, input.benefits || 0) * 12);
+
+    // O mês de férias substitui um salário: 11 líquidos + o líquido das férias.
+    const annualNet = round2(monthlyNet * 11 + vacation.net + thirteenth.net + fgtsTotal + benefits);
+
+    return {
+        salary, inss, irrf, monthlyNet, thirteenth, vacation,
+        fgtsMonthly, fgtsYear, fgtsFine, fgtsTotal, benefits,
+        annualNet, monthlyAverage: round2(annualNet / 12)
+    };
+}
+
+/* Acha a menor entrada cujo líquido anual alcança o alvo.
+
+   As curvas crescem com a entrada, mas não são monótonas: quando o lucro passa de
+   R$ 50 mil/mês, o IRRF de 10% incide sobre o total distribuído e derruba o líquido
+   de uma vez (Lei nº 15.270/2025). Nessa faixa o mesmo alvo tem dois faturamentos
+   possíveis, e a bissecção pura pode devolver o maior. Por isso a varredura grossa
+   primeiro isola o primeiro cruzamento; a bissecção só refina dentro dele. */
+const SOLVER_STEPS = 1000;
+
+function solveForTarget(target, evaluate, upperBound) {
+    if (target <= 0) return {value: 0, exceeded: false};
+
+    let low = 0, high = -1;
+    for (let step = 1; step <= SOLVER_STEPS; step++) {
+        const point = upperBound * step / SOLVER_STEPS;
+        if (evaluate(point) >= target) {
+            high = point;
+            break;
+        }
+        low = point;
+    }
+    if (high < 0) return {value: upperBound, exceeded: true};
+
+    for (let i = 0; i < 60; i++) {
+        const mid = (low + high) / 2;
+        if (evaluate(mid) < target) low = mid; else high = mid;
+    }
+    return {value: round2((low + high) / 2), exceeded: false};
+}
+
+const PJ_INVOICE_CEILING = 500000;   // R$/mês; acima disso o Simples já não cabe
+const CLT_SALARY_CEILING = 300000;   // R$/mês
+
+/* "Quanto preciso faturar como PJ para empatar com X de salário CLT?" */
+function computeCltToPj(input, params) {
+    const clt = computeCltPackage(input, params);
+    const solved = solveForTarget(clt.annualNet,
+        (invoice) => computePj({...input, monthlyInvoice: invoice}, params).annualNet, PJ_INVOICE_CEILING);
+    const pj = computePj({...input, monthlyInvoice: solved.value}, params);
+    return {direction: "clt-to-pj", clt, pj, answer: solved.value, exceeded: solved.exceeded};
+}
+
+/* "Qual salário CLT equivale a X de faturamento PJ?" */
+function computePjToClt(input, params) {
+    const pj = computePj(input, params);
+    const solved = solveForTarget(pj.annualNet,
+        (salary) => computeCltPackage({...input, salary}, params).annualNet, CLT_SALARY_CEILING);
+    const clt = computeCltPackage({...input, salary: solved.value}, params);
+    return {direction: "pj-to-clt", clt, pj, answer: solved.value, exceeded: solved.exceeded};
+}
+
+function computeEquivalence(input, params) {
+    return input.direction === "pj-to-clt" ? computePjToClt(input, params) : computeCltToPj(input, params);
+}
+
 /* ===================== leitura do formulário ===================== */
 function readForm() {
     return {
@@ -864,6 +1080,27 @@ function readSeveranceForm() {
         fgtsWithdrawn: parseCurrency($("#sev-fgts-withdrawn").value),
         irDependents: Math.max(0, parseInt($("#sev-dependents").value, 10) || 0),
         unemploymentRequest: parseInt($("#sev-request").value, 10) || 1
+    };
+}
+
+function readPjForm() {
+    const proLaboreMode = $("#pj-prolabore-mode").value;
+    return {
+        direction: $("#pj-direction").value,
+        salary: parseCurrency($("#pj-clt-salary").value),
+        monthlyInvoice: parseCurrency($("#pj-invoice").value),
+        irDependents: Math.max(0, parseInt($("#pj-dependents").value, 10) || 0),
+        benefits: parseCurrency($("#pj-benefits").value),
+        countFgts: $("#pj-count-fgts").checked,
+        countFgtsFine: $("#pj-count-fgts-fine").checked,
+        annex: $("#pj-annex").value,
+        proLaboreMode,
+        proLaboreValue: proLaboreMode === "percent"
+            ? (parseFloat($("#pj-prolabore-value").value.replace(",", ".")) || 0)
+            : parseCurrency($("#pj-prolabore-value").value),
+        accountingFee: parseCurrency($("#pj-accounting").value),
+        otherExpenses: parseCurrency($("#pj-expenses").value),
+        billedMonths: Math.min(12, Math.max(1, parseInt($("#pj-billed-months").value, 10) || 12))
     };
 }
 
@@ -1322,6 +1559,192 @@ function renderSeveranceMemo(input, result) {
     $("#sev-memo").innerHTML = html;
 }
 
+/* ===================== PJ × CLT: renderização ===================== */
+const PJ_EMPTY_IDS = ["#pj-annex-chip", "#pj-rate-chip", "#pj-factor-chip", "#pj-burden-chip"];
+
+/* kind: "earning"/"deduction" colorem os números, como na folha; "total" destaca a linha.
+   Valores null viram "—" (sem contrapartida no outro regime); strings saem como estão. */
+function pjRowHtml(label, cltValue, pjValue, kind) {
+    const numberClass = kind === "earning" || kind === "deduction" ? " " + kind : "";
+    const cell = (value) => value == null
+        ? `<td class="col-num"><span class="muted">—</span></td>`
+        : `<td class="col-num${numberClass}">${typeof value === "string" ? escapeHtml(value) : formatNumber(value)}</td>`;
+    return `<tr${kind === "total" ? ` class="pj-total"` : ""}><td>${escapeHtml(label)}</td>` +
+        cell(cltValue) + cell(pjValue) + `</tr>`;
+}
+
+function syncPjFields() {
+    const direction = $("#pj-direction").value;
+    $("#pj-clt-salary-field").classList.toggle("hidden", direction !== "clt-to-pj");
+    $("#pj-invoice-field").classList.toggle("hidden", direction !== "pj-to-clt");
+    const mode = $("#pj-prolabore-mode").value;
+    $("#pj-prolabore-value-field").classList.toggle("hidden", mode !== "fixed" && mode !== "percent");
+    $("#pj-count-fgts-fine").disabled = !$("#pj-count-fgts").checked;
+}
+
+function renderPj() {
+    syncPjFields();
+    const input = readPjForm();
+    const given = input.direction === "pj-to-clt" ? input.monthlyInvoice : input.salary;
+    if (given <= 0) {
+        $("#pj-body").innerHTML = `<tr><td colspan="3" class="empty-state">${input.direction === "pj-to-clt"
+            ? "Informe o faturamento mensal da PJ para achar o salário CLT equivalente."
+            : "Informe o salário CLT para descobrir quanto faturar como PJ."}</td></tr>`;
+        $("#pj-direction-echo").textContent = "…";
+        $("#pj-answer-label").textContent = input.direction === "pj-to-clt"
+            ? "Salário CLT equivalente" : "Faturamento PJ equivalente";
+        setNetSalary($("#pj-answer"), 0);
+        PJ_EMPTY_IDS.forEach(id => {
+            $(id).textContent = "…";
+        });
+        $("#pj-memo").innerHTML = "";
+        $("#pj-warning").classList.add("hidden");
+        return;
+    }
+
+    const result = computeEquivalence(input, activeParams);
+    const {clt, pj} = result;
+    const toPj = result.direction === "clt-to-pj";
+
+    $("#pj-direction-echo").textContent = toPj
+        ? `CLT ${formatCurrency(clt.salary)} → PJ`
+        : `PJ ${formatCurrency(pj.monthlyInvoice)} → CLT`;
+    $("#pj-answer-label").textContent = toPj
+        ? "Faturamento PJ equivalente (por mês faturado)"
+        : "Salário CLT bruto equivalente";
+    setNetSalary($("#pj-answer"), result.answer);
+
+    let rows = pjRowHtml("Salário bruto (CLT) / faturamento (PJ)", clt.salary, pj.monthlyInvoice);
+    rows += pjRowHtml("Meses com receita no ano", "12", String(pj.billedMonths));
+    rows += pjRowHtml("Receita bruta anual", round2(clt.salary * 12), pj.annualInvoice);
+    rows += pjRowHtml("13º salário (líquido)", clt.thirteenth.net, null);
+    rows += pjRowHtml("Terço constitucional de férias", round2(clt.vacation.vacationThird), null);
+    if (clt.fgtsTotal > 0) {
+        rows += pjRowHtml(`FGTS depositado no ano${clt.fgtsFine > 0
+            ? ` + multa de ${activeParams.severance.finePercent.toLocaleString("pt-BR")}%` : ""}`, clt.fgtsTotal, null);
+    }
+    if (clt.benefits > 0) rows += pjRowHtml("Benefícios no ano (VR/VA, saúde…)", clt.benefits, null);
+    rows += pjRowHtml("DAS do Simples no ano", null, pj.annualDas, "deduction");
+    rows += pjRowHtml("Pró-labore bruto no ano", null, pj.annualProLabore);
+    rows += pjRowHtml("INSS no ano", round2(clt.inss.total * 12 + clt.thirteenth.inss.total),
+        round2(pj.inssProLabore * 12), "deduction");
+    rows += pjRowHtml("IRRF no ano", round2(clt.irrf.total * 12 + clt.thirteenth.irrf.total + clt.vacation.irrf.total),
+        round2(pj.irrf.total * 12), "deduction");
+    if (pj.annualDividendTax > 0) {
+        rows += pjRowHtml(`IRRF de ${activeParams.pj.dividends.rate.toLocaleString("pt-BR")}% sobre lucros`,
+            null, pj.annualDividendTax, "deduction");
+    }
+    if (pj.annualExpenses > 0) rows += pjRowHtml("Contador e despesas no ano", null, pj.annualExpenses, "deduction");
+    rows += pjRowHtml("Lucro distribuído no ano", null, pj.annualProfit);
+    rows += pjRowHtml("Líquido anual no bolso", clt.annualNet, pj.annualNet, "total");
+    rows += pjRowHtml("Média mensal líquida (÷ 12)", clt.monthlyAverage, pj.monthlyNet, "total");
+    $("#pj-body").innerHTML = rows;
+
+    $("#pj-annex-chip").textContent = `Anexo ${pj.annex}`;
+    $("#pj-rate-chip").textContent = formatPercent(pj.simples.rate * 100);
+    $("#pj-factor-chip").textContent = formatPercent(pj.factorR * 100);
+    $("#pj-burden-chip").textContent = formatPercent(pj.effectiveBurden);
+
+    const warnings = [];
+    if (pj.simples.exceedsLimit) {
+        warnings.push(`O faturamento anual de R$ ${formatNumber(pj.annualInvoice)} passa do limite do Simples Nacional
+      (R$ ${formatNumber(pj.simples.limit)}/ano). Nessa faixa a empresa migra para o Lucro Presumido ou Real, que esta
+      simulação não cobre.`);
+    }
+    if (result.exceeded) warnings.push("Não foi possível achar equivalência dentro dos limites da simulação.");
+    if (pj.annualProfit < 0) {
+        warnings.push(`O faturamento não cobre pró-labore, DAS e despesas: o lucro anual ficou negativo
+      (R$ ${formatNumber(pj.annualProfit)}).`);
+    }
+    if (input.annex === "III" && pj.factorRAnnex === "V") {
+        warnings.push(`O Anexo III está forçado, mas o Fator R de ${formatPercent(pj.factorR * 100)} está abaixo de
+      ${activeParams.pj.factorRThreshold.toLocaleString("pt-BR")}% — na prática a Receita aplicaria o Anexo V.
+      Use "automático" ou aumente o pró-labore.`);
+    }
+    if (pj.taxedDividends) {
+        warnings.push(`Os lucros passam de R$ ${formatNumber(activeParams.pj.dividends.monthlyExemption)}/mês:
+      incide IRRF de ${activeParams.pj.dividends.rate.toLocaleString("pt-BR")}% sobre <b>todo</b> o valor distribuído no
+      mês, não só sobre o excedente (Lei nº 15.270/2025).`);
+    }
+    const warningBox = $("#pj-warning");
+    warningBox.classList.toggle("hidden", warnings.length === 0);
+    warningBox.innerHTML = warnings.map(text => `<p>${text}</p>`).join("");
+
+    $("#pj-memo").innerHTML = renderPjMemo(input, result);
+}
+
+function renderPjMemo(input, result) {
+    const {clt, pj} = result;
+    const params = activeParams;
+    const pct = (value) => value.toLocaleString("pt-BR");
+
+    let html = `<h3>Pacote CLT anual (o alvo a igualar)</h3>
+    <p class="formula">11 × líquido ${formatNumber(clt.monthlyNet)} + mês de férias ${formatNumber(clt.vacation.net)} + 13º ${formatNumber(clt.thirteenth.net)}${clt.fgtsTotal > 0 ? ` + FGTS ${formatNumber(clt.fgtsTotal)}` : ""}${clt.benefits > 0 ? ` + benefícios ${formatNumber(clt.benefits)}` : ""} = R$ ${formatNumber(clt.annualNet)}/ano</p>
+    <p>O mês de férias substitui um salário: por isso 11 líquidos mensais mais o líquido das férias com o terço
+    constitucional (CF, art. 7º, XVII). ${clt.fgtsTotal > 0
+        ? `O FGTS entra como dinheiro do trabalhador${clt.fgtsFine > 0 ? `, com a multa de ${pct(params.severance.finePercent)}% da dispensa sem justa causa` : ""}, ainda que só liberado nas hipóteses do art. 20 da Lei 8.036/1990.`
+        : "O FGTS está fora da conta — marque a opção para incluí-lo."}</p>`;
+
+    html += `<h3>Pró-labore</h3>`;
+    const modeText = {
+        minimum: `um salário mínimo (R$ ${formatNumber(params.minimumWage)})`,
+        "factor-r": `${pct(params.pj.factorRThreshold)}% do faturamento — o mínimo para garantir o Anexo III`,
+        percent: `${pct(input.proLaboreValue)}% do faturamento`,
+        fixed: "valor fixo informado"
+    }[input.proLaboreMode];
+    html += `<p class="formula">pró-labore = ${modeText} = R$ ${formatNumber(pj.proLabore)}/mês</p>`;
+    html += `<p class="formula">INSS = ${pct(params.pj.proLaboreInssRate)}% × ${formatNumber(pj.inssBase)} = R$ ${formatNumber(pj.inssProLabore)}/mês</p>
+    <p>Contribuinte individual: 11% sobre o pró-labore, com base entre o salário mínimo e o teto de
+    R$ ${formatNumber(params.inss.ceiling)} (Lei nº 8.212/1991, art. 21). A CPP patronal de 20% já está embutida no DAS
+    dos anexos III e V, então não é cobrada à parte.</p>`;
+    html += irrfMemoHtml(pj.irrf, "o pró-labore", "INSS + dependentes");
+
+    html += `<h3>Fator R e enquadramento (LC 123/2006, art. 18, §§ 5º-J e 5º-M)</h3>
+    <p class="formula">Fator R = folha 12 meses ${formatNumber(pj.annualProLabore)} ÷ RBT12 ${formatNumber(pj.annualInvoice)} = ${formatPercent(pj.factorR * 100)}</p>
+    <p>${pj.factorR >= params.pj.factorRThreshold / 100
+        ? `Como ficou em ${formatPercent(pj.factorR * 100)} (≥ ${pct(params.pj.factorRThreshold)}%), a empresa cai no <b>Anexo III</b>, de alíquotas menores.`
+        : `Como ficou abaixo de ${pct(params.pj.factorRThreshold)}%, a empresa cai no <b>Anexo V</b>, mais caro.`}
+    ${input.annex !== "auto" ? ` O anexo está <b>forçado no Anexo ${input.annex}</b> pelo formulário.` : ""}</p>`;
+
+    const brackets = pj.annex === "III" ? params.pj.simples.annexIII : params.pj.simples.annexV;
+    const bracket = brackets[Math.min(pj.simples.bracket, brackets.length) - 1];
+    html += `<h3>DAS do Simples Nacional (Anexo ${pj.annex}, ${pj.simples.bracket}ª faixa)</h3>
+    <p class="formula">alíquota efetiva = (RBT12 ${formatNumber(pj.annualInvoice)} × ${pct(bracket.rate)}% − ${formatNumber(bracket.deduction)}) ÷ ${formatNumber(pj.annualInvoice)} = ${formatPercent(pj.simples.rate * 100)}</p>
+    <p class="formula">DAS = ${formatNumber(pj.monthlyInvoice)} × ${formatPercent(pj.simples.rate * 100)} = R$ ${formatNumber(pj.das)}/mês</p>
+    <p>O RBT12 é a receita bruta dos 12 meses anteriores; aqui ela é projetada como
+    ${pj.billedMonths} ${pj.billedMonths === 1 ? "mês faturado" : "meses faturados"} × R$ ${formatNumber(pj.monthlyInvoice)}
+    em regime permanente. No primeiro ano a receita é proporcionalizada e a alíquota real tende a ser menor.</p>`;
+
+    html += `<h3>Lucro distribuído</h3>
+    <p class="formula">lucro anual = receita ${formatNumber(pj.annualInvoice)} − DAS ${formatNumber(pj.annualDas)} − pró-labore ${formatNumber(pj.annualProLabore)}${pj.annualExpenses > 0 ? ` − despesas ${formatNumber(pj.annualExpenses)}` : ""} = R$ ${formatNumber(pj.annualProfit)}</p>
+    <p class="formula">distribuição mensal = ${formatNumber(pj.annualProfit)} ÷ 12 = R$ ${formatNumber(pj.monthlyProfit)}</p>`;
+    html += pj.taxedDividends
+        ? `<p class="formula">IRRF = ${formatNumber(pj.monthlyProfit)} × ${pct(params.pj.dividends.rate)}% = R$ ${formatNumber(pj.dividendTax)}/mês</p>
+      <p>Desde 1º/01/2026, a distribuição da mesma PJ para a mesma pessoa física acima de
+      R$ ${formatNumber(params.pj.dividends.monthlyExemption)} no mês sofre retenção de ${pct(params.pj.dividends.rate)}%
+      sobre o <b>total</b> pago no mês (Lei nº 15.270/2025). Lucros apurados até 31/12/2025 com distribuição aprovada
+      no mesmo prazo seguem isentos se pagos até 2028.</p>`
+        : `<p>Distribuição de até R$ ${formatNumber(params.pj.dividends.monthlyExemption)}/mês por sócio segue
+      <b>isenta</b> de IRRF (Lei nº 15.270/2025). Exige escrituração contábil regular que comprove o lucro.</p>`;
+
+    html += `<h3>Resultado</h3>
+    <p class="formula">líquido PJ = pró-labore líquido ${formatNumber(pj.netProLabore)} × 12 + lucro ${formatNumber(pj.annualProfit)}${pj.annualDividendTax > 0 ? ` − IRRF sobre lucros ${formatNumber(pj.annualDividendTax)}` : ""} = R$ ${formatNumber(pj.annualNet)}/ano</p>
+    <p class="formula">${result.direction === "clt-to-pj"
+        ? `faturar R$ ${formatNumber(pj.monthlyInvoice)}/mês como PJ ≈ salário CLT de R$ ${formatNumber(clt.salary)}`
+        : `salário CLT de R$ ${formatNumber(clt.salary)} ≈ faturar R$ ${formatNumber(pj.monthlyInvoice)}/mês como PJ`}</p>
+    <p>Carga total sobre o faturamento (DAS + INSS + IRRF): ${formatPercent(pj.effectiveBurden)}.
+    O valor equivalente é encontrado por busca binária sobre o líquido anual dos dois lados.</p>`;
+
+    html += `<h3>O que a conta não cobre</h3>
+    <p>Do lado CLT ficam de fora direitos sem valor direto aqui: estabilidade, seguro-desemprego, aviso prévio,
+    licenças remuneradas e o INSS integral do empregador. Do lado PJ ficam de fora ISS fixo de sociedades uniprofissionais,
+    substituição tributária, custos de abertura da empresa, previdência privada para repor a aposentadoria e o risco de
+    <b>pejotização</b> — se houver pessoalidade, subordinação, habitualidade e onerosidade, o vínculo pode ser
+    reconhecido na Justiça do Trabalho (CLT, arts. 2º e 3º). Confirme o enquadramento e o anexo do seu CNAE com um
+    contador.</p>`;
+    return html;
+}
+
 /* ===================== itens dinâmicos ===================== */
 function addDynamicItem(listSelector, withFlags, saved) {
     const element = document.createElement("div");
@@ -1369,7 +1792,10 @@ const FORM_FIELDS = ["base-salary", "work-schedule", "custom-schedule", "referen
     "sev-base-salary", "sev-averages", "sev-admission", "sev-termination", "sev-type",
     "sev-notice-employer", "sev-notice-employee", "sev-contract-end",
     "sev-expired-periods", "sev-expired-double", "sev-fgts-balance", "sev-fgts-withdrawn",
-    "sev-dependents", "sev-request"];
+    "sev-dependents", "sev-request",
+    "pj-direction", "pj-clt-salary", "pj-invoice", "pj-dependents", "pj-benefits",
+    "pj-count-fgts", "pj-count-fgts-fine", "pj-annex", "pj-prolabore-mode", "pj-prolabore-value",
+    "pj-accounting", "pj-expenses", "pj-billed-months"];
 
 function saveFormState() {
     const data = {};
@@ -1421,10 +1847,12 @@ function restoreFormState() {
 
 /* ===================== parâmetros: persistência e aba de edição ===================== */
 
-/* Migração: parâmetros salvos antes da aba Rescisão não tinham severance/unemployment. */
+/* Migração: parâmetros salvos antes das abas Rescisão e PJ não tinham
+   severance/unemployment/pj. */
 function normalizeParams(params) {
     if (!params.severance) params.severance = JSON.parse(JSON.stringify(DEFAULT_PARAMS.severance));
     if (!params.unemployment) params.unemployment = JSON.parse(JSON.stringify(DEFAULT_PARAMS.unemployment));
+    if (!params.pj) params.pj = JSON.parse(JSON.stringify(DEFAULT_PARAMS.pj));
     return params;
 }
 
@@ -1529,6 +1957,27 @@ function applySettingsLock() {
     $("#lock-settings").classList.toggle("hidden", !settingsUnlocked);
 }
 
+/* Faixas do Simples (RBT12 anual, alíquota nominal e parcela a deduzir). */
+function renderSimplesTable(selector, brackets, key, label) {
+    const body = $(selector);
+    body.innerHTML = "";
+    brackets.forEach((bracket, index) => {
+        const row = document.createElement("tr");
+        row.innerHTML = `<td><input data-simples="${key}" data-index="${index}" data-key="upTo" value="${formatNumber(bracket.upTo)}" aria-label="${label}, faixa ${index + 1}, receita bruta até"></td>
+      <td><input data-simples="${key}" data-index="${index}" data-key="rate" value="${String(bracket.rate).replace(".", ",")}" aria-label="${label}, alíquota nominal da faixa ${index + 1}"></td>
+      <td><input data-simples="${key}" data-index="${index}" data-key="deduction" value="${formatNumber(bracket.deduction)}" aria-label="${label}, parcela a deduzir da faixa ${index + 1}"></td>`;
+        body.appendChild(row);
+    });
+}
+
+function readSimplesTable(selector) {
+    return $$(selector + " tr").map(row => ({
+        upTo: parseCurrency(row.querySelector('[data-key="upTo"]').value),
+        rate: parseFloat(row.querySelector('[data-key="rate"]').value.replace(",", ".")) || 0,
+        deduction: parseCurrency(row.querySelector('[data-key="deduction"]').value)
+    })).filter(bracket => bracket.upTo > 0).sort((a, b) => a.upTo - b.upTo);
+}
+
 function renderSettings() {
     const inssBody = $("#inss-brackets-body");
     inssBody.innerHTML = "";
@@ -1550,6 +1999,13 @@ function renderSettings() {
       <td><button type="button" class="btn btn-small btn-danger" data-remove-irrf="${index}" aria-label="Remover faixa ${index + 1} do IRRF">×</button></td>`;
         irrfBody.appendChild(row);
     });
+
+    renderSimplesTable("#simples-iii-body", activeParams.pj.simples.annexIII, "iii", "Anexo III");
+    renderSimplesTable("#simples-v-body", activeParams.pj.simples.annexV, "v", "Anexo V");
+    $("#prolabore-inss-rate").value = String(activeParams.pj.proLaboreInssRate).replace(".", ",");
+    $("#factor-r-threshold").value = String(activeParams.pj.factorRThreshold).replace(".", ",");
+    $("#dividend-rate").value = String(activeParams.pj.dividends.rate).replace(".", ",");
+    $("#dividend-exemption").value = formatNumber(activeParams.pj.dividends.monthlyExemption);
 
     $("#params-year").value = activeParams.year || "";
     $("#minimum-wage").value = formatNumber(activeParams.minimumWage);
@@ -1605,8 +2061,15 @@ function readSettings() {
         };
     }).sort((a, b) => (a.upTo == null ? Infinity : a.upTo) - (b.upTo == null ? Infinity : b.upTo));
 
+    const annexIII = readSimplesTable("#simples-iii-body");
+    const annexV = readSimplesTable("#simples-v-body");
+
     if (!inssBrackets.length || !irrfBrackets.length) {
         showSettingsError("As tabelas precisam de ao menos uma faixa válida.");
+        return false;
+    }
+    if (!annexIII.length || !annexV.length) {
+        showSettingsError("Os anexos III e V do Simples precisam de ao menos uma faixa válida.");
         return false;
     }
 
@@ -1644,6 +2107,15 @@ function readSettings() {
             secondBase: parseCell($("#su-second-base").value),
             secondFactor: parseFloat($("#su-second-factor").value.replace(",", ".")) || 0,
             ceiling: parseCell($("#su-ceiling").value)
+        },
+        pj: {
+            proLaboreInssRate: parseFloat($("#prolabore-inss-rate").value.replace(",", ".")) || 0,
+            factorRThreshold: parseFloat($("#factor-r-threshold").value.replace(",", ".")) || 0,
+            dividends: {
+                rate: parseFloat($("#dividend-rate").value.replace(",", ".")) || 0,
+                monthlyExemption: parseCell($("#dividend-exemption").value)
+            },
+            simples: {annexIII, annexV}
         }
     };
     return true;
@@ -2443,6 +2915,12 @@ function initEvents() {
     };
     $("#severance-form").addEventListener("input", handleSeveranceChange);
     $("#severance-form").addEventListener("change", handleSeveranceChange);
+    const handlePjChange = () => {
+        saveFormState();
+        renderPj();
+    };
+    $("#pj-form").addEventListener("input", handlePjChange);
+    $("#pj-form").addEventListener("change", handlePjChange);
 
     $("#th-clear").addEventListener("click", () => {
         if (!confirm("Limpar os campos do 13º salário?")) return;
@@ -2485,6 +2963,25 @@ function initEvents() {
         // também salva e re-renderiza.
         ["sev-type", "sev-notice-employer", "sev-notice-employee", "sev-request",
             "sev-admission", "sev-termination", "sev-contract-end"]
+            .forEach(id => $("#" + id).dispatchEvent(new Event("change", {bubbles: true})));
+    });
+
+    $("#pj-clear").addEventListener("click", () => {
+        if (!confirm("Limpar os campos da simulação PJ?")) return;
+        ["pj-clt-salary", "pj-invoice", "pj-benefits", "pj-prolabore-value"].forEach(id => {
+            $("#" + id).value = "";
+        });
+        $("#pj-dependents").value = "0";
+        $("#pj-accounting").value = "";
+        $("#pj-expenses").value = "";
+        $("#pj-billed-months").value = "12";
+        $("#pj-count-fgts").checked = true;
+        $("#pj-count-fgts-fine").checked = false;
+        $("#pj-direction").value = "clt-to-pj";
+        $("#pj-annex").value = "auto";
+        $("#pj-prolabore-mode").value = "factor-r";
+        // Ressincroniza os selects personalizados; o change também salva e re-renderiza.
+        ["pj-direction", "pj-annex", "pj-prolabore-mode"]
             .forEach(id => $("#" + id).dispatchEvent(new Event("change", {bubbles: true})));
     });
 
@@ -2594,6 +3091,7 @@ function initEvents() {
         renderSettings();
         updateBadges();
         renderResult();
+        renderPj();
         const note = $("#settings-saved-note");
         note.classList.remove("hidden");
         setTimeout(() => note.classList.add("hidden"), 2500);
@@ -2610,6 +3108,7 @@ function initEvents() {
         renderSettings();
         updateBadges();
         renderResult();
+        renderPj();
     });
 
     $("#export-settings").addEventListener("click", () => {
@@ -2630,6 +3129,7 @@ function initEvents() {
             renderSettings();
             updateBadges();
             renderResult();
+            renderPj();
         } catch (error) {
             showSettingsError("JSON inválido: " + error.message);
         }
@@ -2658,6 +3158,7 @@ function init() {
     renderThirteenth();
     renderVacation();
     renderSeverance();
+    renderPj();
 }
 
 if (typeof document !== "undefined" && document.getElementById("payroll-form")) init();
@@ -2667,6 +3168,7 @@ if (typeof module !== "undefined" && module.exports) {
     module.exports = {
         computePayroll, computeInss, computeIrrf, computeThirteenth, computeVacation,
         computeSeverance, computeNoticeDays, computeUnemployment,
+        computePj, computeCltPackage, computeEquivalence, simplesEffectiveRate,
         taxFromTable, parseCurrency, parseHours, monthCalendar,
         parseIsoDate, calendarTwelfths, anniversaryTwelfths, DEFAULT_PARAMS
     };

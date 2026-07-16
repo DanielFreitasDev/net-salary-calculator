@@ -5,10 +5,10 @@ Calculadora de salário líquido CLT (Brasil) com as tabelas oficiais vigentes e
 ## Descrição e objetivo
 
 Aplicação web 100% estática que estima a folha de pagamento mensal de um trabalhador CLT no formato de um demonstrativo
-de pagamento (holerite), com memória de cálculo completa — e inclui simuladores de **13º salário**, de **férias** e de *
-*rescisão do contrato** no mesmo padrão, em abas próprias. O objetivo é chegar o mais perto possível do cálculo de uma
-contabilidade real, usando exclusivamente dados de fontes oficiais do governo (Receita Federal, INSS/MPS e Planalto), e
-permitir que o usuário mantenha as tabelas atualizadas sem tocar no código.
+de pagamento (holerite), com memória de cálculo completa — e inclui simuladores de **13º salário**, de **férias**, de *
+*rescisão do contrato** e de **equivalência PJ × CLT** no mesmo padrão, em abas próprias. O objetivo é chegar o mais
+perto possível do cálculo de uma contabilidade real, usando exclusivamente dados de fontes oficiais do governo (Receita
+Federal, INSS/MPS e Planalto), e permitir que o usuário mantenha as tabelas atualizadas sem tocar no código.
 
 ## Funcionalidades
 
@@ -49,8 +49,19 @@ permitir que o usuário mantenha as tabelas atualizadas sem tocar no código.
   conforme a modalidade, limitada a 80% no acordo) e a **estimativa do seguro-desemprego** (carência, 3 a 5 parcelas e
   faixas oficiais do MTE de 2026, com piso no salário mínimo e teto de R$ 2.518,65), fechando com o **total geral
   estimado** (líquido + FGTS sacável + seguro).
+- **Simulador PJ × CLT** (aba própria), nos dois sentidos: *quanto preciso faturar como PJ para igualar um salário CLT* e
+  *que salário CLT equivale a um faturamento PJ*. A comparação é feita pelo **líquido anual** dos dois lados — 11
+  salários líquidos + o mês de férias com o terço + 13º (mais FGTS e benefícios, opcionais) contra pró-labore líquido +
+  lucro distribuído. Modela uma PJ de serviços no **Simples Nacional** com um sócio: alíquota efetiva do DAS pelo RBT12
+  ((RBT12 × alíquota − parcela a deduzir) ÷ RBT12), **Fator R** decidindo automaticamente entre **Anexo III** (a partir
+  de 28% de folha) e **Anexo V**, pró-labore em quatro modos (28% do faturamento, salário mínimo, % ou valor fixo), INSS
+  de 11% do contribuinte individual (base entre o mínimo e o teto), IRRF do pró-labore com o redutor de 2026 e o **IRRF
+  de 10% sobre lucros acima de R$ 50.000/mês** da Lei nº 15.270/2025 — que incide sobre o total distribuído no mês, não
+  só sobre o excedente. Aceita contador, despesas e meses efetivamente faturados no ano, e avisa quando o Anexo III é
+  forçado sem Fator R, quando o faturamento estoura o limite do Simples (R$ 4,8 mi/ano) ou quando o lucro fica negativo.
 - **Tabelas e parâmetros editáveis** na própria interface, com persistência em `localStorage`, restauração dos padrões
-  2026 e exportação/importação de JSON — incluindo aviso prévio, multas do FGTS e faixas do seguro-desemprego.
+  2026 e exportação/importação de JSON — incluindo aviso prévio, multas do FGTS, faixas do seguro-desemprego, as tabelas
+  dos Anexos III e V do Simples e os parâmetros de PJ (INSS do pró-labore, limite do Fator R e IRRF sobre lucros).
 - **Tema claro/escuro** com três estados (Claro / Auto / Escuro), respeitando `prefers-color-scheme` no modo Auto e
   persistindo a escolha manual.
 - **Memória de cálculo** detalhada e leiaute de impressão que imprime apenas o demonstrativo.
@@ -104,10 +115,13 @@ prontas para extração futura em módulos.
 5. Na aba **Rescisão**, informe salário, datas de admissão/desligamento e a modalidade (sem justa causa, acordo, pedido,
    justa causa, indireta, culpa recíproca, contrato a termo, falecimento): o termo simulado mostra as verbas com
    descontos, o FGTS (multa e saque liberado), a estimativa do seguro-desemprego e o total geral.
-6. Em **Tabelas e parâmetros**, atualize os valores quando o governo publicar novos (checklist de janeiro incluído na
+6. Na aba **PJ vs CLT**, escolha a direção e informe o salário CLT (ou o faturamento). Ajuste o pró-labore, o contador e
+   os benefícios que a PJ perderia; o comparativo anual e a memória mostram o Fator R, o anexo aplicado e a alíquota
+   efetiva do DAS.
+7. Em **Tabelas e parâmetros**, atualize os valores quando o governo publicar novos (checklist de janeiro incluído na
    própria aba) e clique em **Salvar**.
-7. Em **Fontes oficiais**, acesse os links diretos de cada norma usada.
-8. Alterne o tema no seletor **Claro / Auto / Escuro** no topo.
+8. Em **Fontes oficiais**, acesse os links diretos de cada norma usada.
+9. Alterne o tema no seletor **Claro / Auto / Escuro** no topo.
 
 ## Validação e testes
 
@@ -129,6 +143,9 @@ prontas para extração futura em módulos.
 | Rescisão sem justa causa    | Aba Rescisão: salário `3.000,00`, admissão `10/01/2023`, desligamento `30/06/2026`, aviso indenizado, 1 período de férias vencidas, saldo FGTS `10.000,00`, 1ª solicitação | Aviso 39d `3.900,00` · 13º 7/12 `1.750,00` · férias prop. 7/12 `1.750,00` + 1/3 `583,33` · líquido `14.601,54` · multa 40% `4.276,80` · saque `14.968,80` · seguro 5 × `2.167,00` |
 | Rescisão por acordo (484-A) | Aba Rescisão: salário `5.000,00`, admissão `01/03/2024`, desligamento `31/07/2026`, aviso indenizado, saldo FGTS `8.000,00`                                                | Aviso metade (18d) `3.000,00` · 13º 8/12 `3.333,33` · líquido `13.876,55` · multa 20% `1.781,33` · saque 80% `8.550,40` · sem seguro-desemprego                                   |
 | Rescisão por justa causa    | Aba Rescisão: salário `4.000,00`, admissão `01/02/2025`, desligamento `15/07/2026`, 1 período de férias vencidas                                                           | Saldo 15d `2.000,00` · férias vencidas `5.333,33` · líquido `7.177,64` · sem aviso, 13º, férias proporcionais, multa, saque e seguro                                              |
+| PJ: CLT → faturamento       | Aba PJ vs CLT: salário CLT `10.000,00`, pró-labore `28%`, anexo automático, FGTS marcado, sem contador/despesas                                                            | Faturar `10.042,47`/mês · Anexo `III` · DAS `6,00%` · Fator R `28,0%` · pró-labore `2.811,89` · líquido anual `109.567,35` dos dois lados                                         |
+| PJ: faturamento → CLT       | Aba PJ vs CLT: direção invertida, faturamento `15.000,00`, pró-labore `28%`, anexo automático, FGTS marcado                                                                | Salário CLT `15.051,86` · Anexo `III` · DAS `6,00%` · líquido anual `163.656,00` · média mensal `13.638,00`                                                                       |
+| PJ: Fator R derruba o anexo | Aba PJ vs CLT: faturamento `15.000,00`, pró-labore `um salário mínimo`, anexo automático                                                                                   | Fator R cai a `10,8%` → Anexo `V` · DAS `15,50%` · o CLT equivalente cai de `15.051,86` para `13.772,69`                                                                          |
 
 Falha = qualquer valor diferente dos acima (tolerância de R$ 0,01 por arredondamento).
 
@@ -144,17 +161,30 @@ A suíte usada no desenvolvimento cobre mais de 80 casos (INSS por faixa e teto,
 três zonas, DSR, periculosidade na base da HE, salário-família, deduções legais, parsers de moeda/horas, 13º por
 avos/parcelas/teto, férias com abono e adiantamento do 13º, e rescisão nas 10 modalidades: aviso proporcional com
 projeção — inclusive cruzando o ano —, avos de 13º/férias, multas de 40%/20%, saque de 80% no acordo,
-carência/parcelas/faixas do seguro-desemprego e entradas inválidas). O motor exporta `computePayroll`, `computeInss`,
-`computeIrrf`, `computeThirteenth`, `computeVacation`, `computeSeverance`, `computeNoticeDays`, `computeUnemployment`,
-`taxFromTable`, `parseCurrency`, `parseHours`, `parseIsoDate`, `calendarTwelfths`, `anniversaryTwelfths` e
-`monthCalendar`.
+carência/parcelas/faixas do seguro-desemprego e entradas inválidas), além da equivalência PJ × CLT (alíquota efetiva dos
+anexos III e V, Fator R no limite exato, degrau do IRRF sobre lucros e ida-e-volta CLT → PJ → CLT). O motor exporta
+`computePayroll`, `computeInss`, `computeIrrf`, `computeThirteenth`, `computeVacation`, `computeSeverance`,
+`computeNoticeDays`, `computeUnemployment`, `computePj`, `computeCltPackage`, `computeEquivalence`,
+`simplesEffectiveRate`, `taxFromTable`, `parseCurrency`, `parseHours`, `parseIsoDate`, `calendarTwelfths`,
+`anniversaryTwelfths` e `monthCalendar`.
+
+A equivalência é resolvida numericamente: `computeEquivalence` faz uma varredura grossa seguida de bissecção sobre o
+líquido anual, convergindo dentro de R$ 0,06 e com ida-e-volta exata ao centavo. A varredura existe porque a curva **não
+é monótona**: quando o lucro passa de R$ 50 mil/mês, o IRRF de 10% incide sobre o total distribuído e derruba o líquido
+de uma vez, criando dois faturamentos válidos para o mesmo alvo — a varredura garante que o menor deles seja escolhido.
 
 ### Edge cases relevantes
 
 - **Salário vazio ou zero**: o demonstrativo mostra o estado vazio "Informe o salário base para começar".
 - **Rescisão sem datas ou com datas invertidas**: estado vazio com mensagem específica; nada é calculado.
-- **Parâmetros salvos antes da aba Rescisão**: `normalizeParams` completa `severance`/`unemployment` com os padrões (
-  migração transparente do `localStorage`).
+- **Parâmetros salvos antes das abas Rescisão e PJ**: `normalizeParams` completa `severance`/`unemployment`/`pj` com os
+  padrões (migração transparente do `localStorage`).
+- **PJ com Anexo III forçado sem Fator R**: o cálculo respeita a escolha, mas um aviso explica que a Receita aplicaria o
+  Anexo V.
+- **PJ acima do limite do Simples** (R$ 4,8 mi/ano) **ou com lucro negativo**: aviso explícito; o Lucro Presumido/Real
+  não é coberto.
+- **Fator R exatamente em 28%**: o pró-labore entra na razão **sem arredondar** — usar o valor já arredondado derrubaria
+  o fator para 27,9996% e jogaria a empresa no Anexo V a cada centavo, serrilhando a curva.
 - **JSON inválido na importação de parâmetros**: mensagem de erro inline (sem `alert`), nada é sobrescrito.
 - **Tabelas sem faixas válidas ao salvar**: erro inline e os parâmetros anteriores são mantidos.
 - **`localStorage` indisponível** (modo anônimo restrito): a calculadora funciona normalmente, apenas sem persistência.
@@ -195,6 +225,8 @@ carência/parcelas/faixas do seguro-desemprego e entradas inválidas). O motor e
 
 ## Possíveis melhorias futuras
 
+- PJ no **Lucro Presumido** (IRPJ/CSLL/PIS/COFINS/ISS) além do Simples Nacional.
+- Múltiplos sócios na simulação PJ (o limite de isenção dos lucros é por CPF).
 - Comparativo entre dois cenários lado a lado.
 - Suporte a múltiplos perfis salvos (ex.: "meu salário" vs "proposta nova").
 - Exportação do demonstrativo em PDF com nome/mês personalizados.
@@ -212,4 +244,7 @@ seguro-desemprego), Lei nº 7.713/1988, art. 6º, V (isenções das verbas inden
 7.418/1985 (vale-transporte), Lei nº 4.090/1962 e Lei nº 4.749/1965 com o Decreto nº 10.854/2021 (13º salário), Lei nº
 8.212/1991 (INSS do 13º em separado; isenções do art. 28, § 9º), IN RFB nº 1.500/2014 atualizada pela IN RFB nº
 2.299/2025 (IRRF do 13º com redutor; isenções), IN RFB nº 2.110/2022 (aviso indenizado sem INSS) e RIR/2018, art. 682 (
-férias tributadas em separado), além das Súmulas 14, 171, 261 e 305 do TST e 125 e 386 do STJ.
+férias tributadas em separado), Lei Complementar nº 123/2006, art. 18 e anexos III e V (Simples Nacional e Fator R), Lei
+nº 8.212/1991, arts. 12, 21 e 28 (INSS do pró-labore como contribuinte individual), Lei nº 15.270/2025 com o
+"Perguntas e Respostas" da Receita Federal (IRRF de 10% sobre lucros acima de R$ 50 mil/mês, desde 1º/01/2026) e CLT,
+arts. 2º, 3º e 9º (vínculo de emprego e pejotização), além das Súmulas 14, 171, 261 e 305 do TST e 125 e 386 do STJ.
